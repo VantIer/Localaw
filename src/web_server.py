@@ -1,12 +1,15 @@
 import sys
 import os
 import platform
+import json
+import asyncio
 from pathlib import Path
+from typing import Iterator
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 import uvicorn
 
 from src.config import Config
@@ -33,17 +36,22 @@ def get_system_name():
 class WebServer:
     def __init__(self, config_path: str = "config.json"):
         self.config = Config(config_path)
-        
+
         self.system_name = get_system_name()
         self.config.system_prompt = self.config.system_prompt \
             .replace("{system_name}", self.system_name)
-        
+
         self.llm = LLMClient(self.config)
         self.executor = CommandExecutor()
         self.auth_mode = AuthMode.ALWAYS
         self.session_authorized = False
         self.pending_commands = []
         self.current_commands = []
+
+        self.auth_event = asyncio.Event()
+        self.auth_result = None
+        self.auth_commands = None
+        self.auth_received = False
 
         self.web_dir = Path(__file__).parent.parent / "web"
         self.app = FastAPI()
@@ -86,22 +94,248 @@ class WebServer:
                     "error": str(e)
                 }, status_code=200)
 
+        @self.app.post("/api/chat-stream")
+        async def chat_stream(message: str = Form(...)):
+            async def event_generator():
+                self.auth_event.clear()
+                self.auth_result = None
+                self.auth_commands = None
+                self.auth_received = False
+                
+                if self.auth_mode == AuthMode.ALWAYS:
+                    self.session_authorized = False
+
+                self.llm.conversation_history.append({"role": "user", "content": message})
+
+                max_iterations = 20
+                iteration = 0
+
+                while iteration < max_iterations:
+                    iteration += 1
+
+                    yield f"data: {json.dumps({'type': 'answering', 'iteration': iteration})}\n\n"
+
+                    messages = [{"role": "system", "content": self.config.system_prompt}]
+                    messages.extend(self.llm.conversation_history)
+
+                    full_response = ""
+                    commands = []
+
+                    try:
+                        stream = self.llm.client.chat.completions.create(
+                            model=self.config.model,
+                            messages=messages,
+                            temperature=0.7,
+                            stream=True
+                        )
+
+                        for chunk in stream:
+                            if chunk.choices and chunk.choices[0].delta.content:
+                                content = chunk.choices[0].delta.content
+                                full_response += content
+                                yield f"data: {json.dumps({'type': 'chunk', 'content': content})}\n\n"
+
+                        self.llm.conversation_history.append({"role": "assistant", "content": full_response})
+
+                        parsed_commands = CommandParser.parse(full_response)
+                        if parsed_commands:
+                            commands = parsed_commands
+                            self.current_commands = commands
+
+                        yield f"data: {json.dumps({'type': 'response_done', 'iteration': iteration, 'commands': commands})}\n\n"
+
+                        if not commands:
+                            break
+
+                        if self.need_authorization():
+                            self.auth_commands = commands
+                            yield f"data: {json.dumps({'type': 'auth_required', 'commands': commands})}\n\n"
+                            yield f"data: {json.dumps({'type': 'waiting_auth', 'iteration': iteration})}\n\n"
+                            
+                            try:
+                                await asyncio.wait_for(self.auth_event.wait(), timeout=300)
+                            except asyncio.TimeoutError:
+                                yield f"data: {json.dumps({'type': 'auth_denied', 'message': 'Authorization timeout'})}\n\n"
+                                self.auth_event.clear()
+                                self.auth_result = None
+                                self.auth_commands = None
+                                break
+
+                            self.auth_received = True
+
+                            if self.auth_result is None or self.auth_result.get('authorized') == False:
+                                yield f"data: {json.dumps({'type': 'auth_denied', 'message': 'User denied command execution'})}\n\n"
+                                self.auth_event.clear()
+                                self.auth_result = None
+                                self.auth_commands = None
+                                break
+
+                            selected_commands = self.auth_result.get('commands', commands)
+                            if not selected_commands:
+                                yield f"data: {json.dumps({'type': 'auth_denied', 'message': 'No commands selected'})}\n\n"
+                                self.auth_event.clear()
+                                self.auth_result = None
+                                self.auth_commands = None
+                                break
+
+                            self.auth_event.clear()
+                            self.auth_result = None
+
+                            yield f"data: {json.dumps({'type': 'executing', 'commands': selected_commands})}\n\n"
+
+                            results = self.execute_commands(selected_commands)
+                            self.session_authorized = True
+
+                            result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in results])
+                            yield f"data: {json.dumps({'type': 'execution_done', 'results': results})}\n\n"
+
+                            self.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
+                            self.auth_commands = None
+                            continue
+
+                        yield f"data: {json.dumps({'type': 'executing', 'commands': commands})}\n\n"
+
+                        results = self.execute_commands(commands)
+                        self.session_authorized = True
+
+                        result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in results])
+                        yield f"data: {json.dumps({'type': 'execution_done', 'results': results})}\n\n"
+
+                        self.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
+
+                    except Exception as e:
+                        yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+                        break
+
+                self.auth_commands = None
+                yield f"data: {json.dumps({'type': 'done', 'iteration': iteration})}\n\n"
+
+            return StreamingResponse(event_generator(), media_type="text/event-stream")
+
         @self.app.post("/api/execute")
         async def execute(authorize: bool = Form(...)):
             if not authorize:
-                return JSONResponse({"executions": [], "skipped": True})
+                try:
+                    follow_up = self.llm.send_message("User denied command execution")
+                    self.current_commands = []
+                    return JSONResponse({
+                        "executions": [],
+                        "response": follow_up,
+                        "skipped": True
+                    })
+                except Exception as e:
+                    self.current_commands = []
+                    return JSONResponse({
+                        "executions": [],
+                        "response": "User denied command execution",
+                        "skipped": True
+                    })
 
             results = self.execute_commands(self.current_commands)
-            if self.auth_mode == AuthMode.SESSION:
+            self.session_authorized = True
+
+            result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in results])
+
+            try:
+                follow_up = self.llm.send_message(f"Command execution result:\n{result_text}")
+                self.current_commands = []
+                return JSONResponse({
+                    "executions": results,
+                    "response": follow_up,
+                    "skipped": False
+                })
+            except Exception as e:
+                self.current_commands = []
+                return JSONResponse({
+                    "executions": results,
+                    "response": f"Command executed, but failed to get AI response: {str(e)}",
+                    "skipped": False
+                })
+
+        @self.app.post("/api/execute-single")
+        async def execute_single(command: str = Form(...)):
+            try:
+                cmd = json.loads(command)
+                action = cmd.get("action")
+                params = {k: v for k, v in cmd.items() if k != "action"}
+                result = self.executor.execute(action, params)
                 self.session_authorized = True
-            self.current_commands = []
-            return JSONResponse({"executions": results})
+                return JSONResponse({"result": result, "error": None})
+            except Exception as e:
+                return JSONResponse({"result": None, "error": str(e)})
+
+        @self.app.post("/api/authorize-execute")
+        async def authorize_execute(authorized: str = Form(...), commands: str = Form(...)):
+            try:
+                is_authorized = authorized.lower() == "true"
+                cmd_list = json.loads(commands) if commands else []
+                self.auth_result = {
+                    "authorized": is_authorized,
+                    "commands": cmd_list if is_authorized else []
+                }
+                self.auth_received = True
+                self.auth_event.set()
+                return JSONResponse({"success": True})
+            except Exception as e:
+                self.auth_result = {"authorized": False, "commands": []}
+                self.auth_received = True
+                self.auth_event.set()
+                return JSONResponse({"success": False, "error": str(e)})
+
+        @self.app.post("/api/continue")
+        async def continue_conversation(execution_results: str = Form(...)):
+            try:
+                results = json.loads(execution_results)
+                result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in results])
+                self.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
+
+                max_iterations = 20
+                iteration = 0
+                all_commands = []
+
+                while iteration < max_iterations:
+                    iteration += 1
+                    messages = [{"role": "system", "content": self.config.system_prompt}]
+                    messages.extend(self.llm.conversation_history)
+
+                    full_response = self.llm.client.chat.completions.create(
+                        model=self.config.model,
+                        messages=messages,
+                        temperature=0.7,
+                        stream=False
+                    ).choices[0].message.content
+
+                    if full_response:
+                        self.llm.conversation_history.append({"role": "assistant", "content": full_response})
+                        parsed_commands = CommandParser.parse(full_response) or []
+                    else:
+                        parsed_commands = []
+                    all_commands.extend(parsed_commands)
+
+                    if not parsed_commands:
+                        break
+
+                    cmd_results = self.execute_commands(parsed_commands)
+                    self.session_authorized = True
+
+                    result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in cmd_results])
+                    self.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
+
+                return JSONResponse({
+                    "response": full_response if full_response else "",
+                    "commands": all_commands,
+                    "iterations": iteration
+                })
+            except Exception as e:
+                return JSONResponse({"response": f"Error: {str(e)}", "commands": [], "iterations": 0})
 
         @self.app.post("/api/set-auth")
         async def set_auth(mode: str = Form(...)):
             self.auth_mode = mode
             if mode == AuthMode.SESSION:
                 self.session_authorized = True
+            else:
+                self.session_authorized = False
             return {"success": True, "auth_mode": mode}
 
         @self.app.post("/api/reset")

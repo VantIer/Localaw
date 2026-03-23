@@ -42,6 +42,8 @@ class Localaw:
         self.auth_mode = mode
         if mode == AuthMode.SESSION:
             self.session_authorized = True
+        else:
+            self.session_authorized = False
 
     def reset_session_auth(self):
         self.session_authorized = False
@@ -143,6 +145,11 @@ def main():
                         results = tool.execute_commands(commands, True)
                     else:
                         results = {"executions": [], "skipped": True}
+                        try:
+                            denial_response = tool.llm.send_message("User denied command execution")
+                            print(f"\nAI: {denial_response}")
+                        except Exception as e:
+                            print(f"\nAI acknowledged the denial.")
                 else:
                     print("\n(Session authorized - executing automatically)")
                     results = tool.execute_commands(commands, True)
