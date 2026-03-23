@@ -1,0 +1,165 @@
+import sys
+import os
+import platform
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.config import Config
+from src.llm import LLMClient, CommandParser
+from src.executor import CommandExecutor
+
+
+class AuthMode:
+    ALWAYS = "always"
+    SESSION = "session"
+
+
+def get_system_info():
+    system = platform.system().lower()
+    if system == "windows":
+        return "Windows", ["dir", "type", "del", "rd", "md", "copy", "move", "tasklist", "taskkill", "ipconfig", "ping"]
+    elif system == "linux":
+        return "Linux", ["ls", "cat", "rm", "mkdir", "cp", "mv", "ps", "kill", "ifconfig", "ping", "grep", "find"]
+    elif system == "darwin":
+        return "macOS", ["ls", "cat", "rm", "mkdir", "cp", "mv", "ps", "kill", "ifconfig", "ping"]
+    return system, []
+
+
+class Localaw:
+    def __init__(self, config_path: str = "config.json"):
+        self.config = Config(config_path)
+        
+        system_name, _ = get_system_info()
+        self.system_name = system_name
+        self.config.system_prompt = self.config.system_prompt \
+            .replace("{system_name}", system_name)
+        
+        self.llm = LLMClient(self.config)
+        self.executor = CommandExecutor()
+        self.auth_mode = AuthMode.ALWAYS
+        self.session_authorized = False
+
+    def set_auth_mode(self, mode: str):
+        self.auth_mode = mode
+        if mode == AuthMode.SESSION:
+            self.session_authorized = True
+
+    def reset_session_auth(self):
+        self.session_authorized = False
+
+    def process_user_input(self, user_input: str) -> tuple[str, list]:
+        llm_response = self.llm.send_message(user_input)
+        commands = CommandParser.parse(llm_response)
+        return llm_response, commands or []
+
+    def execute_commands(self, commands: list, auto_authorized: bool = False) -> dict:
+        results = []
+        for cmd in commands:
+            action = cmd.get("action")
+            params = {k: v for k, v in cmd.items() if k != "action"}
+            result = self.executor.execute(action, params)
+            results.append({
+                "action": action,
+                "params": params,
+                "result": result
+            })
+        return {"executions": results}
+
+    def need_authorization(self) -> bool:
+        if self.auth_mode == AuthMode.ALWAYS:
+            return True
+        return not self.session_authorized
+
+
+def main():
+    tool = Localaw()
+
+    print("=" * 60)
+    print("Localaw - Local AI Assistant")
+    print("=" * 60)
+    print(f"OS: {tool.system_name}")
+    print(f"Model: {tool.config.model}")
+    print(f"API Base: {tool.config.api_base}")
+    print("=" * 60)
+    print("\nCommands:")
+    print("  :auth on    - Enable session authorization mode")
+    print("  :auth off   - Disable session authorization mode")
+    print("  :reset      - Reset conversation")
+    print("  :quit       - Exit")
+    print("  :config     - Show current configuration")
+    print("\n")
+
+    while True:
+        try:
+            user_input = input("\nYou: ").strip()
+            if not user_input:
+                continue
+
+            if user_input.lower() in [":quit", ":q", "exit"]:
+                print("Goodbye!")
+                break
+
+            if user_input.lower() == ":reset":
+                tool.llm.reset_conversation()
+                print("Conversation reset.")
+                continue
+
+            if user_input.lower() == ":auth on":
+                tool.set_auth_mode(AuthMode.SESSION)
+                print("Session authorization mode enabled.")
+                continue
+
+            if user_input.lower() == ":auth off":
+                tool.auth_mode = AuthMode.ALWAYS
+                print("Always ask for authorization mode.")
+                continue
+
+            if user_input.lower() == ":config":
+                print(f"\nAPI Base: {tool.config.api_base}")
+                print(f"Model: {tool.config.model}")
+                print(f"Auth Mode: {tool.auth_mode}")
+                continue
+
+            llm_response, commands = tool.process_user_input(user_input)
+
+            print(f"\nAI: {llm_response}")
+
+            if commands:
+                print("\n" + "-" * 40)
+                print("Commands detected:")
+                for i, cmd in enumerate(commands, 1):
+                    print(f"  {i}. {cmd.get('action')} - {cmd}")
+
+                if tool.need_authorization():
+                    print("\nAuthorization required!")
+                    print("  :y - Execute all commands")
+                    print("  :n - Skip execution")
+                    print("  :y-all - Execute and enable session auth")
+
+                    auth = input("\nExecute? (:y/:n/:y-all) ").strip().lower()
+                    if auth == ":y-all":
+                        tool.set_auth_mode(AuthMode.SESSION)
+                        results = tool.execute_commands(commands, True)
+                    elif auth == ":y":
+                        results = tool.execute_commands(commands, True)
+                    else:
+                        results = {"executions": [], "skipped": True}
+                else:
+                    print("\n(Session authorized - executing automatically)")
+                    results = tool.execute_commands(commands, True)
+
+                if results.get("executions"):
+                    print("\n" + "-" * 40)
+                    print("Execution Results:")
+                    for ex in results["executions"]:
+                        print(f"\n[{ex['action']}]")
+                        print(f"  Result: {ex['result'][:500]}")
+
+        except KeyboardInterrupt:
+            print("\n\nInterrupted. Type :quit to exit.")
+        except Exception as e:
+            print(f"\nError: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()

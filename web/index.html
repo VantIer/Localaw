@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Localaw - Local AI Assistant</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f5;
+            --bg-tertiary: #ffffff;
+            --bg-chat: #ffffff;
+            --border-color: #e0e0e0;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --text-accent: #444;
+            --btn-primary: #444;
+            --btn-secondary: #e0e0e0;
+            --btn-danger: #dc3545;
+            --status-unauth: #dc3545;
+            --status-auth: #28a745;
+            --cmd-bg: #f5f5f5;
+            --modal-bg: #ffffff;
+            --spinner-border: #e0e0e0;
+            --spinner-color: #444;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --bg-tertiary: #2d2d2d;
+            --bg-chat: #1e1e1e;
+            --border-color: #3d3d3d;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --text-accent: #b0b0b0;
+            --btn-primary: #b0b0b0;
+            --btn-secondary: #3d3d3d;
+            --btn-danger: #dc3545;
+            --status-unauth: #dc3545;
+            --status-auth: #28a745;
+            --cmd-bg: #1a1a1a;
+            --modal-bg: #1e1e1e;
+            --spinner-border: #3d3d3d;
+            --spinner-color: #b0b0b0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: var(--bg-secondary);
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 1.2rem;
+            color: var(--text-accent);
+        }
+        .header-info {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .main-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow: hidden;
+        }
+        .chat-box {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-chat);
+            margin-bottom: 15px;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            border-radius: 10px;
+            max-width: 85%;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .message span, .message div {
+            tab-size: 4;
+        }
+        .message.user {
+            background: var(--bg-secondary);
+            margin-left: auto;
+        }
+        .message.ai {
+            background: var(--bg-tertiary);
+        }
+        .message.system {
+            background: var(--cmd-bg);
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        .message .cmd-block {
+            background: var(--bg-primary);
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+        #messageInput {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+        #messageInput:focus {
+            outline: none;
+            border-color: var(--btn-secondary);
+        }
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: var(--btn-primary);
+            color: #fff;
+        }
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+        .btn-secondary {
+            background: var(--btn-secondary);
+            color: var(--text-primary);
+        }
+        .btn-secondary:hover {
+            opacity: 0.9;
+        }
+        .btn-danger {
+            background: var(--btn-danger);
+            color: #fff;
+        }
+        .btn-danger:hover {
+            opacity: 0.9;
+        }
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .sidebar h3 {
+            font-size: 1rem;
+            color: var(--text-accent);
+            margin-bottom: 15px;
+        }
+        .theme-toggle {
+            margin-bottom: 20px;
+        }
+        .auth-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+        .auth-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--status-unauth);
+        }
+        .status-dot.authorized {
+            background: var(--status-auth);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal.show {
+            display: flex;
+        }
+        .modal-content {
+            background: var(--modal-bg);
+            padding: 25px;
+            border-radius: 12px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+        }
+        .modal-content h3 {
+            color: var(--text-accent);
+            margin-bottom: 15px;
+        }
+        .modal-commands {
+            background: var(--cmd-bg);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            margin: 15px 0;
+            white-space: pre-wrap;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .loading.show {
+            display: block;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--spinner-border);
+            border-top-color: var(--spinner-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Localaw</h1>
+        <div class="header-info">
+            <span id="modelName">Model: --</span> | 
+            <span id="authMode">Auth: Always</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="chat-container">
+            <div class="chat-box" id="chatBox">
+            </div>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>Processing...</div>
+            </div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
+                <button class="btn btn-primary" id="sendBtn">Send</button>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="theme-toggle">
+                <button class="btn btn-secondary" id="themeToggle" style="width: 100%;">
+                    Switch to Dark Mode
+                </button>
+            </div>
+
+            <div class="auth-section">
+                <h3>Authorization</h3>
+                <div class="auth-status">
+                    <div class="status-dot" id="authDot"></div>
+                    <span id="authStatus">Not Authorized</span>
+                </div>
+                <button class="btn btn-secondary" id="authToggle" style="width: 100%; margin-top: 10px;">
+                    Enable Session Auth
+                </button>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #333;">
+                <button class="btn btn-danger" id="resetBtn" style="width: 100%;">
+                    Reset Conversation
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="cmdModal">
+        <div class="modal-content">
+            <h3>Command Authorization</h3>
+            <p>The AI has requested to execute the following commands:</p>
+            <div class="modal-commands" id="modalCommands"></div>
+            <p>Do you want to authorize these commands?</p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="modalCancel">Cancel</button>
+                <button class="btn btn-primary" id="modalAuthorize">Authorize</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentCommands = [];
+        let needAuth = false;
+
+        const chatBox = document.getElementById('chatBox');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const loading = document.getElementById('loading');
+        const cmdModal = document.getElementById('cmdModal');
+        const modalCommands = document.getElementById('modalCommands');
+        const authDot = document.getElementById('authDot');
+        const authStatus = document.getElementById('authStatus');
+        const authToggle = document.getElementById('authToggle');
+        const resetBtn = document.getElementById('resetBtn');
+
+        async function loadConfig() {
+            const res = await fetch('/api/config');
+            const config = await res.json();
+            document.getElementById('modelName').textContent = 'Model: ' + config.model;
+            updateAuthUI(config.auth_mode, config.session_authorized);
+        }
+
+        function updateAuthUI(mode, sessionAuth) {
+            document.getElementById('authMode').textContent = 'Auth: ' + (mode === 'session' ? 'Session' : 'Always');
+            if (sessionAuth && mode === 'session') {
+                authDot.classList.add('authorized');
+                authStatus.textContent = 'Session Authorized';
+                authToggle.textContent = 'Disable Session Auth';
+            } else {
+                authDot.classList.remove('authorized');
+                authStatus.textContent = 'Not Authorized';
+                authToggle.textContent = 'Enable Session Auth';
+            }
+        }
+
+        function extractTextContent(text) {
+            if (!text) return '';
+            const str = String(text);
+            try {
+                if (str.startsWith('{') && str.endsWith('}')) {
+                    const obj = JSON.parse(str);
+                    if (obj.content && typeof obj.content === 'string') {
+                        return obj.content;
+                    }
+                }
+            } catch {}
+            return str;
+        }
+
+        function addMessage(content, type, commands = null) {
+            if (content === null || content === undefined) content = '';
+            const div = document.createElement('div');
+            div.className = 'message ' + type;
+            
+            let displayText = extractTextContent(content);
+            
+            if (commands && commands.length > 0) {
+                const parts = displayText.split(/(```json\n?[\s\S]*?```)/g);
+                parts.forEach(part => {
+                    if (part.match(/^```json\n?([\s\S]*?)```$/)) {
+                        const json = part.replace(/^```json\n?([\s\S]*?)```$/, '$1');
+                        try {
+                            const obj = JSON.parse(json);
+                            const cmdDiv = document.createElement('div');
+                            cmdDiv.className = 'cmd-block';
+                            cmdDiv.textContent = 'Action: ' + obj.action + '\nParams: ' + JSON.stringify(obj, null, 2).replace(/\t/g, '    ');
+                            div.appendChild(cmdDiv);
+                        } catch {
+                            const cmdDiv = document.createElement('div');
+                            cmdDiv.className = 'cmd-block';
+                            cmdDiv.textContent = json.replace(/\t/g, '    ');
+                            div.appendChild(cmdDiv);
+                        }
+                    } else {
+                        const span = document.createElement('span');
+                        span.textContent = part.replace(/\t/g, '    ');
+                        div.appendChild(span);
+                    }
+                });
+            } else {
+                const span = document.createElement('span');
+                span.textContent = displayText.replace(/\t/g, '    ');
+                div.appendChild(span);
+            }
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function showLoading(show) {
+            loading.classList.toggle('show', show);
+            sendBtn.disabled = show;
+            messageInput.disabled = show;
+        }
+
+        async function sendMessage() {
+            const msg = messageInput.value.trim();
+            if (!msg) return;
+
+            addMessage(msg, 'user');
+            messageInput.value = '';
+            showLoading(true);
+
+            try {
+                const formData = new FormData();
+                formData.append('message', msg);
+
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+
+                addMessage(data.response || 'No response', 'ai', data.commands);
+
+                if (data.commands && data.commands.length > 0) {
+                    currentCommands = data.commands;
+                    needAuth = data.need_auth;
+
+                    if (data.need_auth && !data.session_authorized) {
+                        modalCommands.textContent = JSON.stringify(data.commands, null, 2);
+                        cmdModal.classList.add('show');
+                    } else {
+                        await executeCommands(true);
+                    }
+                }
+            } catch (err) {
+                addMessage('Error: ' + err.message, 'system');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function executeCommands(authorize) {
+            cmdModal.classList.remove('show');
+
+            if (!authorize) {
+                addMessage('Command execution cancelled by user.', 'system');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('authorize', 'true');
+
+                const res = await fetch('/api/execute', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (data.executions && data.executions.length > 0) {
+                    data.executions.forEach(ex => {
+                        addMessage(ex.result, 'system');
+                    });
+                }
+
+                await loadConfig();
+            } catch (err) {
+                addMessage('Execution error: ' + err.message, 'system');
+            }
+
+            currentCommands = [];
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        document.getElementById('modalAuthorize').addEventListener('click', () => executeCommands(true));
+        document.getElementById('modalCancel').addEventListener('click', () => executeCommands(false));
+
+        authToggle.addEventListener('click', async () => {
+            const currentMode = document.getElementById('authMode').textContent;
+            const newMode = currentMode.includes('Always') ? 'session' : 'always';
+            
+            const formData = new FormData();
+            formData.append('mode', newMode);
+
+            await fetch('/api/set-auth', {
+                method: 'POST',
+                body: formData
+            });
+            await loadConfig();
+        });
+
+        resetBtn.addEventListener('click', async () => {
+            await fetch('/api/reset', { method: 'POST' });
+            chatBox.innerHTML = '<div class="message system">Conversation reset.</div>';
+            await loadConfig();
+        });
+
+        const themeToggle = document.getElementById('themeToggle');
+        function setTheme(dark) {
+            if (dark) {
+                document.body.setAttribute('data-theme', 'dark');
+                themeToggle.textContent = 'Switch to Light Mode';
+            } else {
+                document.body.removeAttribute('data-theme');
+                themeToggle.textContent = 'Switch to Dark Mode';
+            }
+            localStorage.setItem('theme', dark ? 'dark' : 'light');
+        }
+        themeToggle.addEventListener('click', () => {
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            setTheme(!isDark);
+        });
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            setTheme(true);
+        }
+
+        loadConfig();
+    </script>
+</body>
+</html>

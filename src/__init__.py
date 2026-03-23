@@ -1,0 +1,1 @@
+# Localaw - Local AI Assistant
