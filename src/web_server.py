@@ -19,25 +19,24 @@ class AuthMode:
     SESSION = "session"
 
 
-def get_system_info():
+def get_system_name():
     system = platform.system().lower()
     if system == "windows":
-        return "Windows", ["dir", "type", "del", "rd", "md", "copy", "move", "tasklist", "taskkill", "ipconfig", "ping"]
+        return "Windows"
     elif system == "linux":
-        return "Linux", ["ls", "cat", "rm", "mkdir", "cp", "mv", "ps", "kill", "ifconfig", "ping", "grep", "find"]
+        return "Linux"
     elif system == "darwin":
-        return "macOS", ["ls", "cat", "rm", "mkdir", "cp", "mv", "ps", "kill", "ifconfig", "ping"]
-    return system, []
+        return "macOS"
+    return system
 
 
 class WebServer:
     def __init__(self, config_path: str = "config.json"):
         self.config = Config(config_path)
         
-        system_name, _ = get_system_info()
-        self.system_name = system_name
+        self.system_name = get_system_name()
         self.config.system_prompt = self.config.system_prompt \
-            .replace("{system_name}", system_name)
+            .replace("{system_name}", self.system_name)
         
         self.llm = LLMClient(self.config)
         self.executor = CommandExecutor()
