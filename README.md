@@ -38,15 +38,29 @@ Edit `config.json`:
 
 ```bash
 python -m src.main
+# or
+python -m src.main --mode cli
 ```
 
 ### Web Mode
 
 ```bash
-python -m src.web_server
+python -m src.main --mode web
 ```
 
 Then open http://127.0.0.1:8880 in your browser.
+
+### Startup Scripts
+
+Windows:
+```bash
+start.bat
+```
+
+Linux/Mac:
+```bash
+bash start.sh
+```
 
 ## Supported Commands
 

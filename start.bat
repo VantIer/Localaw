@@ -17,13 +17,13 @@ if "%choice%"=="3" goto end
 
 :cli
 echo Starting CLI mode...
-python -m src.main
+python -m src.main --mode cli
 goto end
 
 :web
 echo Starting Web Server...
 echo Open http://127.0.0.1:8880 in your browser
-python -m src.web_server
+python -m src.main --mode web
 goto end
 
 :end

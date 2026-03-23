@@ -168,4 +168,17 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Localaw - Local AI Assistant")
+    parser.add_argument("--mode", choices=["cli", "web"], default="cli", help="Run mode: cli or web (default: cli)")
+    parser.add_argument("--config", default="config.json", help="Path to config file")
+    args = parser.parse_args()
+    
+    if args.mode == "web":
+        from src.web_server import WebServer
+        server = WebServer(args.config)
+        print(f"Starting Localaw Web Server...")
+        print(f"Open http://{server.config.listen_host}:{server.config.listen_port} in your browser")
+        server.run()
+    else:
+        main()

@@ -36,15 +36,29 @@ pip install -r requirements.txt
 
 ```bash
 python -m src.main
+# 或
+python -m src.main --mode cli
 ```
 
 ### Web 模式
 
 ```bash
-python -m src.web_server
+python -m src.main --mode web
 ```
 
 然后在浏览器中打开 http://127.0.0.1:8880
+
+### 启动脚本
+
+Windows:
+```bash
+start.bat
+```
+
+Linux/Mac:
+```bash
+bash start.sh
+```
 
 ## 支持的命令
 
