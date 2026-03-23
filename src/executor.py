@@ -1,4 +1,5 @@
 import os
+import platform
 import shutil
 import subprocess
 from pathlib import Path
@@ -77,12 +78,13 @@ class CommandExecutor:
         if not self.check_safety(cmd):
             return "Command blocked due to safety concerns"
         try:
+            encoding = 'cp936' if platform.system() == 'Windows' else 'utf-8'
             result = subprocess.run(
                 cmd,
                 shell=True,
                 capture_output=True,
                 text=True,
-                encoding='utf-8',
+                encoding=encoding,
                 errors='replace',
                 timeout=60
             )
