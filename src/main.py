@@ -2,7 +2,12 @@ import sys
 import os
 import platform
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    base_path = sys._MEIPASS
+else:
+    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+sys.path.insert(0, base_path)
 
 from src.config import Config
 from src.llm import LLMClient, CommandParser

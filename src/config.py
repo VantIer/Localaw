@@ -1,12 +1,18 @@
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
 
 class Config:
     def __init__(self, config_path: str = "config.json"):
-        self.config_path = Path(config_path)
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            base_dir = Path(sys._MEIPASS)
+        else:
+            base_dir = Path(__file__).parent.parent
+        
+        self.config_path = base_dir / config_path
         self.api_base: str = "http://localhost:11434/v1"
         self.api_key: str = "ollama"
         self.model: str = "llama3.2"
@@ -27,7 +33,13 @@ class Config:
                 self.listen_port = data.get("listen_port", self.listen_port)
 
     def save(self):
-        with open(self.config_path, "w", encoding="utf-8") as f:
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            base_dir = Path(sys._MEIPASS)
+        else:
+            base_dir = Path(__file__).parent.parent
+        
+        save_path = base_dir / self.config_path.name
+        with open(save_path, "w", encoding="utf-8") as f:
             json.dump({
                 "api_base": self.api_base,
                 "api_key": self.api_key,

@@ -6,7 +6,12 @@ import asyncio
 from pathlib import Path
 from typing import Iterator
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    base_path = sys._MEIPASS
+else:
+    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+sys.path.insert(0, base_path)
 
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
@@ -53,7 +58,11 @@ class WebServer:
         self.auth_commands = None
         self.auth_received = False
 
-        self.web_dir = Path(__file__).parent.parent / "web"
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            self.web_dir = Path(sys._MEIPASS) / "web"
+        else:
+            self.web_dir = Path(__file__).parent.parent / "web"
+        
         self.app = FastAPI()
         self.setup_routes()
 
