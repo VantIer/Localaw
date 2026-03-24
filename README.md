@@ -50,6 +50,20 @@ python -m src.main --mode web
 
 Then open http://127.0.0.1:8880 in your browser.
 
+![Main Interface](./Docs/main.png)
+
+### Custom Configuration
+
+Use `--config` to specify a custom configuration file path (must be absolute path):
+
+```bash
+# Python module
+python -m src.main --config /path/to/config.json
+
+# Packaged executable
+Localaw.exe --mode web --config D:\MyConfigs\localaw.json
+```
+
 ### Startup Scripts
 
 Windows:

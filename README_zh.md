@@ -48,6 +48,20 @@ python -m src.main --mode web
 
 然后在浏览器中打开 http://127.0.0.1:8880
 
+![主界面](./Docs/main.png)
+
+### 自定义配置
+
+使用 `--config` 指定配置文件路径（必须为绝对路径）：
+
+```bash
+# Python 模块运行
+python -m src.main --config /path/to/config.json
+
+# 打包后的可执行文件
+Localaw.exe --mode web --config D:\MyConfigs\localaw.json
+```
+
 ### 启动脚本
 
 Windows:
