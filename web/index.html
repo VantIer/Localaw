@@ -553,8 +553,13 @@
             }
             
             chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
+            
+            if (autoScrollEnabled) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
         }
+
+        let autoScrollEnabled = true;
 
         function showLoading(show) {
             loading.classList.toggle('show', show);
@@ -566,6 +571,7 @@
             const msg = messageInput.value.trim();
             if (!msg) return;
 
+            autoScrollEnabled = true;
             addMessage(msg, 'user');
             messageInput.value = '';
 
@@ -575,7 +581,6 @@
             aiContentSpan.textContent = '';
             aiMsgDiv.appendChild(aiContentSpan);
             chatBox.appendChild(aiMsgDiv);
-            chatBox.scrollTop = chatBox.scrollHeight;
 
             pendingAuthCommands = null;
             modalCommandsList = [];
@@ -614,7 +619,9 @@
 
                                     case 'chunk':
                                         aiContentSpan.textContent += data.content;
-                                        chatBox.scrollTop = chatBox.scrollHeight;
+                                        if (autoScrollEnabled) {
+                                            chatBox.scrollTop = chatBox.scrollHeight;
+                                        }
                                         break;
 
                                     case 'response_done':
@@ -646,7 +653,14 @@
                                         answeringIndicator.classList.remove('show');
                                         if (data.results) {
                                             for (const ex of data.results) {
-                                                addMessage(`[${ex.action}]\n${ex.result}`, 'system');
+                                                let cmdInfo = '';
+                                                if (ex.action === 'exec_cmd' && ex.params && ex.params.command) {
+                                                    cmdInfo = ` [${ex.params.command}]`;
+                                                } else if (ex.params && ex.params.path) {
+                                                    cmdInfo = ` [${ex.params.path}]`;
+                                                }
+                                                const msg = `[${ex.action}]${cmdInfo}\n${ex.result}`;
+                                                addMessage(msg, 'system');
                                             }
                                         }
                                         break;
@@ -853,6 +867,11 @@
         if (savedTheme === 'dark') {
             setTheme(true);
         }
+
+        chatBox.addEventListener('scroll', () => {
+            const isAtBottom = chatBox.scrollHeight - chatBox.clientHeight - chatBox.scrollTop < 50;
+            autoScrollEnabled = isAtBottom;
+        });
 
         loadConfig();
     </script>

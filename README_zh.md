@@ -97,12 +97,13 @@ AI 可以请求执行以下命令：
 
 **平台：**
 - Windows：已测试
-- Linux：未测试
+- Linux：已测试
 
 **AI 提供商：**
 - DeepSeek：已测试
+- Minimax：已测试
 - 其他提供商（OpenAI、Ollama 等）：未测试
 
 **界面：**
 - Web 模式：已测试
-- CLI 模式：未测试
+- CLI 模式：已测试

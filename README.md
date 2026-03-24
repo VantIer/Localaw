@@ -99,12 +99,13 @@ The AI can request these commands:
 
 **Platforms:**
 - Windows: Tested
-- Linux: Not tested
+- Linux: Tested
 
 **AI Providers:**
 - DeepSeek: Tested
+- Minimax: Tested
 - Other providers (OpenAI, Ollama, etc.): Not tested
 
 **Interfaces:**
 - Web Mode: Tested
-- CLI Mode: Not tested
+- CLI Mode: Tested

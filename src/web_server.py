@@ -195,7 +195,7 @@ class WebServer:
                             results = self.execute_commands(selected_commands)
                             self.session_authorized = True
 
-                            result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in results])
+                            result_text = "\n".join([self.format_command_result(ex) for ex in results])
                             yield f"data: {json.dumps({'type': 'execution_done', 'results': results})}\n\n"
 
                             self.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
@@ -207,7 +207,7 @@ class WebServer:
                         results = self.execute_commands(commands)
                         self.session_authorized = True
 
-                        result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in results])
+                        result_text = "\n".join([self.format_command_result(ex) for ex in results])
                         yield f"data: {json.dumps({'type': 'execution_done', 'results': results})}\n\n"
 
                         self.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
@@ -243,7 +243,7 @@ class WebServer:
             results = self.execute_commands(self.current_commands)
             self.session_authorized = True
 
-            result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in results])
+            result_text = "\n".join([self.format_command_result(ex) for ex in results])
 
             try:
                 follow_up = self.llm.send_message(f"Command execution result:\n{result_text}")
@@ -295,7 +295,7 @@ class WebServer:
         async def continue_conversation(execution_results: str = Form(...)):
             try:
                 results = json.loads(execution_results)
-                result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in results])
+                result_text = "\n".join([self.format_command_result(ex) for ex in results])
                 self.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
 
                 max_iterations = 20
@@ -327,7 +327,7 @@ class WebServer:
                     cmd_results = self.execute_commands(parsed_commands)
                     self.session_authorized = True
 
-                    result_text = "\n".join([f"[{ex['action']}]\n{ex['result']}" for ex in cmd_results])
+                    result_text = "\n".join([self.format_command_result(ex) for ex in cmd_results])
                     self.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
 
                 return JSONResponse({
@@ -381,6 +381,19 @@ class WebServer:
                 "result": result
             })
         return results
+
+    def format_command_result(self, ex):
+        action = ex["action"]
+        params = ex["params"]
+        if action == "exec_cmd":
+            cmd_str = params.get("command", "")
+            return f"[{action}] [{cmd_str}]\n{ex['result']}"
+        elif action == "write_file":
+            path = params.get("path", "")
+            return f"[{action}] [{path}]\n{ex['result']}"
+        else:
+            path = params.get("path", "")
+            return f"[{action}] [{path}]\n{ex['result']}"
 
     def run(self):
         uvicorn.run(self.app, host=self.config.listen_host, port=self.config.listen_port, log_level="info")

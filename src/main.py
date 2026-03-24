@@ -1,6 +1,7 @@
 import sys
 import os
 import platform
+import json
 
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
     base_path = sys._MEIPASS
@@ -76,12 +77,72 @@ class Localaw:
             return True
         return not self.session_authorized
 
+    def format_command_result(self, ex):
+        action = ex["action"]
+        params = ex["params"]
+        if action == "exec_cmd":
+            cmd_str = params.get("command", "")
+            return f"[{action}] [{cmd_str}]\n{ex['result']}"
+        elif action == "write_file":
+            path = params.get("path", "")
+            return f"[{action}] [{path}]\n{ex['result']}"
+        else:
+            path = params.get("path", "")
+            return f"[{action}] [{path}]\n{ex['result']}"
+
+    def ask_authorization(self, commands: list) -> tuple[bool, list]:
+        print("\n" + "=" * 50)
+        print("Commands detected:")
+        for i, cmd in enumerate(commands, 1):
+            action = cmd.get("action")
+            params = {k: v for k, v in cmd.items() if k != "action"}
+            if action == "exec_cmd":
+                print(f"  {i}. {action}: {params.get('command', '')}")
+            elif action == "write_file":
+                print(f"  {i}. {action}: {params.get('path', '')}")
+            else:
+                print(f"  {i}. {action}: {params}")
+
+        print("\n" + "-" * 50)
+        print("Authorization options:")
+        print("  :y        - Execute ALL commands")
+        print("  :n        - Skip ALL commands (deny)")
+        print("  :s 1,2,3  - Select specific commands to execute")
+        print("  :y-all    - Execute all and enable session auth")
+        print("  :q        - Quit execution")
+        print("-" * 50)
+
+        while True:
+            auth = input("\nYour choice: ").strip().lower()
+            
+            if auth == ":y":
+                return True, commands
+            elif auth == ":n":
+                return False, []
+            elif auth == ":y-all":
+                self.set_auth_mode(AuthMode.SESSION)
+                return True, commands
+            elif auth.startswith(":s "):
+                try:
+                    indices = [int(x.strip()) - 1 for x in auth[3:].split(",")]
+                    selected = [commands[i] for i in indices if 0 <= i < len(commands)]
+                    if selected:
+                        return True, selected
+                    else:
+                        print("No valid commands selected. Try again.")
+                except ValueError:
+                    print("Invalid format. Use :s 1,2,3")
+            elif auth == ":q":
+                return False, None
+            else:
+                print("Unknown command. Valid options: :y, :n, :s 1,2,3, :y-all, :q")
+
 
 def main():
     tool = Localaw()
 
     print("=" * 60)
-    print("Localaw - Local AI Assistant")
+    print("Localaw - Local AI Assistant (Multi-turn)")
     print("=" * 60)
     print(f"OS: {tool.system_name}")
     print(f"Model: {tool.config.model}")
@@ -89,10 +150,14 @@ def main():
     print("=" * 60)
     print("\nCommands:")
     print("  :auth on    - Enable session authorization mode")
-    print("  :auth off   - Disable session authorization mode")
+    print("  :auth off   - Disable session authorization mode (always ask)")
     print("  :reset      - Reset conversation")
     print("  :quit       - Exit")
     print("  :config     - Show current configuration")
+    print("\n")
+    print("Note: Multi-turn conversation is enabled. After command")
+    print("      execution, results will be fed back to AI for")
+    print("      further processing (max 20 iterations).")
     print("\n")
 
     while True:
@@ -107,6 +172,7 @@ def main():
 
             if user_input.lower() == ":reset":
                 tool.llm.reset_conversation()
+                tool.session_authorized = False
                 print("Conversation reset.")
                 continue
 
@@ -124,47 +190,75 @@ def main():
                 print(f"\nAPI Base: {tool.config.api_base}")
                 print(f"Model: {tool.config.model}")
                 print(f"Auth Mode: {tool.auth_mode}")
+                print(f"Session Authorized: {tool.session_authorized}")
                 continue
 
-            llm_response, commands = tool.process_user_input(user_input)
+            tool.llm.conversation_history.append({"role": "user", "content": user_input})
 
-            print(f"\nAI: {llm_response}")
+            max_iterations = 20
+            iteration = 0
 
-            if commands:
-                print("\n" + "-" * 40)
-                print("Commands detected:")
-                for i, cmd in enumerate(commands, 1):
-                    print(f"  {i}. {cmd.get('action')} - {cmd}")
+            while iteration < max_iterations:
+                iteration += 1
 
-                if tool.need_authorization():
-                    print("\nAuthorization required!")
-                    print("  :y - Execute all commands")
-                    print("  :n - Skip execution")
-                    print("  :y-all - Execute and enable session auth")
+                messages = [{"role": "system", "content": tool.config.system_prompt}]
+                messages.extend(tool.llm.conversation_history)
 
-                    auth = input("\nExecute? (:y/:n/:y-all) ").strip().lower()
-                    if auth == ":y-all":
-                        tool.set_auth_mode(AuthMode.SESSION)
-                        results = tool.execute_commands(commands, True)
-                    elif auth == ":y":
-                        results = tool.execute_commands(commands, True)
-                    else:
-                        results = {"executions": [], "skipped": True}
-                        try:
+                try:
+                    stream = tool.llm.client.chat.completions.create(
+                        model=tool.config.model,
+                        messages=messages,
+                        temperature=0.7,
+                        stream=True
+                    )
+
+                    full_response = ""
+                    for chunk in stream:
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            content = chunk.choices[0].delta.content
+                            full_response += content
+
+                    if full_response:
+                        print(f"\nAI: {full_response}")
+                        tool.llm.conversation_history.append({"role": "assistant", "content": full_response})
+
+                    parsed_commands = CommandParser.parse(full_response) or []
+
+                    if not parsed_commands:
+                        break
+
+                    need_auth = tool.need_authorization()
+                    selected_commands = parsed_commands
+
+                    if need_auth:
+                        authorized, selected = tool.ask_authorization(parsed_commands)
+                        if selected is None:
+                            print("Stopping execution.")
+                            break
+                        if not authorized:
                             denial_response = tool.llm.send_message("User denied command execution")
                             print(f"\nAI: {denial_response}")
-                        except Exception as e:
-                            print(f"\nAI acknowledged the denial.")
-                else:
-                    print("\n(Session authorized - executing automatically)")
-                    results = tool.execute_commands(commands, True)
+                            break
+                        selected_commands = selected
 
-                if results.get("executions"):
                     print("\n" + "-" * 40)
-                    print("Execution Results:")
-                    for ex in results["executions"]:
+                    print(f"Executing {len(selected_commands)} command(s)...")
+                    results = tool.execute_commands(selected_commands)
+                    tool.session_authorized = True
+
+                    for ex in results.get("executions", []):
                         print(f"\n[{ex['action']}]")
-                        print(f"  Result: {ex['result'][:500]}")
+                        print(f"  Result: {str(ex['result'])[:300]}")
+
+                    result_text = "\n".join([tool.format_command_result(ex) for ex in results.get("executions", [])])
+                    tool.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
+
+                except Exception as e:
+                    print(f"\nError in iteration {iteration}: {str(e)}")
+                    break
+
+            if iteration >= max_iterations:
+                print(f"\nMax iterations ({max_iterations}) reached. Conversation continues...")
 
         except KeyboardInterrupt:
             print("\n\nInterrupted. Type :quit to exit.")
