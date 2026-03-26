@@ -61,8 +61,6 @@ python -m src.main --mode web
 
 Then open http://127.0.0.1:8880 in your browser.
 
-![Main Interface](./Docs/main.png)
-
 ### Web Interface Features
 
 - **Controls panel**: Theme toggle, auth mode, conversation reset
@@ -74,7 +72,12 @@ Then open http://127.0.0.1:8880 in your browser.
 
 Click the buttons on the right side of the header to open panels. Only one panel can be open at a time.
 
-Use `--config` to specify a custom configuration file path (must be absolute path):
+![Main Interface](./Docs/web_main.png)
+![Controls Panel](./Docs/web_ctrl.png)
+![Command Panel](./Docs/web_cmd.png)
+![FileManager](./Docs/web_file.png)
+
+### Custom Configuration
 
 ```bash
 # Python module

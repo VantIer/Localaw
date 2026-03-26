@@ -59,8 +59,6 @@ python -m src.main --mode web
 
 然后在浏览器中打开 http://127.0.0.1:8880
 
-![主界面](./Docs/main.png)
-
 ### Web 界面功能
 
 - **Controls 控制面板**：主题切换、授权模式设置、会话重置
@@ -71,6 +69,11 @@ python -m src.main --mode web
   - 上传和下载文件
 
 点击标题栏右侧按钮可打开对应面板，同时只能打开一个面板。
+
+![主界面](./Docs/web_main.png)
+![Controls 面板](./Docs/web_ctrl.png)
+![Command 面板](./Docs/web_cmd.png)
+![FileManager](./Docs/web_file.png)
 
 ### 自定义配置
 
