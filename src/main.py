@@ -138,8 +138,8 @@ class Localaw:
                 print("Unknown command. Valid options: :y, :n, :s 1,2,3, :y-all, :q")
 
 
-def main():
-    tool = Localaw()
+def main(config_path: str = "config.json"):
+    tool = Localaw(config_path)
 
     print("=" * 60)
     print("Localaw - Local AI Assistant (Multi-turn)")
@@ -157,7 +157,7 @@ def main():
     print("\n")
     print("Note: Multi-turn conversation is enabled. After command")
     print("      execution, results will be fed back to AI for")
-    print("      further processing (max 20 iterations).")
+    print(f"      further processing (max {tool.config.round_limit} iterations).")
     print("\n")
 
     while True:
@@ -280,4 +280,4 @@ if __name__ == "__main__":
         print(f"Open http://{server.config.listen_host}:{server.config.listen_port} in your browser")
         server.run()
     else:
-        main()
+        main(args.config)
