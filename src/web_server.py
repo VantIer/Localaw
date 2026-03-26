@@ -471,6 +471,57 @@ class WebServer:
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)
 
+        @self.app.post("/api/files/mkdir")
+        async def make_dir(dirname: str = Form(...)):
+            try:
+                dir_path = self.current_path / dirname
+                dir_path.mkdir()
+                return JSONResponse({
+                    "path": str(dir_path),
+                    "error": None
+                })
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.app.post("/api/files/copy")
+        async def copy_file(src: str = Form(...), dest: str = Form(...)):
+            try:
+                import shutil
+                src_path = Path(src)
+                dest_path = Path(dest)
+                if not src_path.exists():
+                    return JSONResponse({"error": "Source not found"}, status_code=404)
+                if src_path.is_dir():
+                    shutil.copytree(src_path, dest_path)
+                else:
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src_path, dest_path)
+                return JSONResponse({
+                    "src": str(src_path),
+                    "dest": str(dest_path),
+                    "error": None
+                })
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.app.post("/api/files/move")
+        async def move_file(src: str = Form(...), dest: str = Form(...)):
+            try:
+                import shutil
+                src_path = Path(src)
+                dest_path = Path(dest)
+                if not src_path.exists():
+                    return JSONResponse({"error": "Source not found"}, status_code=404)
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src_path), str(dest_path))
+                return JSONResponse({
+                    "src": str(src_path),
+                    "dest": str(dest_path),
+                    "error": None
+                })
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
     def process_message(self, message: str):
         llm_response = self.llm.send_message(message)
         commands = CommandParser.parse(llm_response) or []

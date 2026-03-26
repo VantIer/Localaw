@@ -67,7 +67,8 @@ Then open http://127.0.0.1:8880 in your browser.
 - **Command panel**: Execute shell commands directly
 - **FileManager**:
   - Browse directories (click to select, double-click to enter)
-  - Create new files, delete files/directories
+  - Refresh, create new files, create new directories
+  - Copy, move, delete files/directories
   - Upload and download files
 
 Click the buttons on the right side of the header to open panels. Only one panel can be open at a time.

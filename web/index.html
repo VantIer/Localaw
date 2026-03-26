@@ -548,8 +548,12 @@
 
     <div class="files-panel" id="filesPanel">
         <div class="files-toolbar">
+            <button class="btn btn-secondary" id="filesRefreshBtn">Refresh</button>
             <button class="btn btn-secondary" id="filesParentBtn">Parent Dir</button>
             <button class="btn btn-secondary" id="filesNewBtn">New File</button>
+            <button class="btn btn-secondary" id="filesNewDirBtn">New Dir</button>
+            <button class="btn btn-secondary" id="filesCopyBtn">Copy</button>
+            <button class="btn btn-secondary" id="filesMoveBtn">Move</button>
             <button class="btn btn-secondary" id="filesDeleteBtn">Delete</button>
             <button class="btn btn-secondary" id="filesUploadBtn">Upload</button>
             <button class="btn btn-secondary" id="filesDownloadBtn">Download</button>
@@ -566,6 +570,17 @@
             <div class="files-modal-actions">
                 <button class="btn btn-secondary" id="filesModalCancel">Cancel</button>
                 <button class="btn btn-primary" id="filesModalConfirm">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="files-modal" id="filesPathModal">
+        <div class="files-modal-content">
+            <h3 id="filesPathModalTitle">Copy/Move</h3>
+            <input type="text" id="filesPathModalInput" placeholder="Enter destination path...">
+            <div class="files-modal-actions">
+                <button class="btn btn-secondary" id="filesPathModalCancel">Cancel</button>
+                <button class="btn btn-primary" id="filesPathModalConfirm">Confirm</button>
             </div>
         </div>
     </div>
@@ -1109,9 +1124,15 @@
         const filesModalConfirm = document.getElementById('filesModalConfirm');
         const filesModalCancel = document.getElementById('filesModalCancel');
         const filesUploadInput = document.getElementById('filesUploadInput');
+        const filesPathModal = document.getElementById('filesPathModal');
+        const filesPathModalTitle = document.getElementById('filesPathModalTitle');
+        const filesPathModalInput = document.getElementById('filesPathModalInput');
+        const filesPathModalConfirm = document.getElementById('filesPathModalConfirm');
+        const filesPathModalCancel = document.getElementById('filesPathModalCancel');
 
         let selectedFile = null;
         let filesModalCallback = null;
+        let filesPathModalCallback = null;
 
         filesToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1186,6 +1207,10 @@
             element.classList.add('selected');
             selectedFile = item;
         }
+
+        document.getElementById('filesRefreshBtn').addEventListener('click', async () => {
+            await loadFilesList();
+        });
 
         document.getElementById('filesParentBtn').addEventListener('click', async () => {
             try {
@@ -1287,6 +1312,117 @@
         filesModalInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 filesModalConfirm.click();
+            }
+        });
+
+        document.getElementById('filesNewDirBtn').addEventListener('click', () => {
+            filesModalTitle.textContent = 'New Directory';
+            filesModalInput.value = 'NewDir';
+            filesModalConfirm.textContent = 'Create';
+            filesModalCallback = async (dirname) => {
+                if (!dirname) dirname = 'NewDir';
+                try {
+                    const formData = new FormData();
+                    formData.append('dirname', dirname);
+                    const res = await fetch('/api/files/mkdir', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                    } else {
+                        await loadFilesList();
+                    }
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            };
+            filesModal.classList.add('show');
+            filesModalInput.focus();
+            filesModalInput.select();
+        });
+
+        document.getElementById('filesCopyBtn').addEventListener('click', () => {
+            if (!selectedFile) {
+                alert('Please select a file or directory to copy.');
+                return;
+            }
+            const srcPath = filesPath.textContent + '/' + selectedFile.name;
+            filesPathModalTitle.textContent = 'Copy: ' + selectedFile.name;
+            filesPathModalInput.value = srcPath;
+            filesPathModalConfirm.textContent = 'Copy';
+            filesPathModalCallback = async (destPath) => {
+                if (!destPath) {
+                    alert('Please enter a destination path.');
+                    return;
+                }
+                try {
+                    const formData = new FormData();
+                    formData.append('src', srcPath);
+                    formData.append('dest', destPath);
+                    const res = await fetch('/api/files/copy', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                    } else {
+                        await loadFilesList();
+                    }
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            };
+            filesPathModal.classList.add('show');
+            filesPathModalInput.focus();
+            filesPathModalInput.select();
+        });
+
+        document.getElementById('filesMoveBtn').addEventListener('click', () => {
+            if (!selectedFile) {
+                alert('Please select a file or directory to move.');
+                return;
+            }
+            const srcPath = filesPath.textContent + '/' + selectedFile.name;
+            filesPathModalTitle.textContent = 'Move: ' + selectedFile.name;
+            filesPathModalInput.value = srcPath;
+            filesPathModalConfirm.textContent = 'Move';
+            filesPathModalCallback = async (destPath) => {
+                if (!destPath) {
+                    alert('Please enter a destination path.');
+                    return;
+                }
+                try {
+                    const formData = new FormData();
+                    formData.append('src', srcPath);
+                    formData.append('dest', destPath);
+                    const res = await fetch('/api/files/move', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                    } else {
+                        await loadFilesList();
+                    }
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            };
+            filesPathModal.classList.add('show');
+            filesPathModalInput.focus();
+            filesPathModalInput.select();
+        });
+
+        filesPathModalCancel.addEventListener('click', () => {
+            filesPathModal.classList.remove('show');
+        });
+
+        filesPathModalConfirm.addEventListener('click', () => {
+            const value = filesPathModalInput.value.trim();
+            if (filesPathModalCallback) {
+                filesPathModalCallback(value);
+            }
+            filesPathModal.classList.remove('show');
+        });
+
+        filesPathModalInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                filesPathModalConfirm.click();
             }
         });
 
