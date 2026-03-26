@@ -7,42 +7,48 @@
     <style>
         :root {
             --bg-primary: #ffffff;
-            --bg-secondary: #f5f5f5;
-            --bg-tertiary: #ffffff;
+            --bg-secondary: #f0f0f0;
+            --bg-tertiary: #e8e8e8;
             --bg-chat: #ffffff;
-            --border-color: #e0e0e0;
+            --border-color: #d0d0d0;
             --text-primary: #333;
             --text-secondary: #666;
             --text-accent: #444;
-            --btn-primary: #444;
-            --btn-secondary: #e0e0e0;
+            --btn-primary: #4F46E5;
+            --btn-secondary: #d0d0d0;
             --btn-danger: #dc3545;
             --status-unauth: #dc3545;
             --status-auth: #28a745;
-            --cmd-bg: #f5f5f5;
+            --cmd-bg: #e8e8e8;
             --modal-bg: #ffffff;
             --spinner-border: #e0e0e0;
             --spinner-color: #444;
+            --msg-user-bg: #dde4ff;
+            --msg-ai-bg: #f0f0f0;
+            --file-selected-bg: #dde4ff;
         }
 
         [data-theme="dark"] {
             --bg-primary: #121212;
-            --bg-secondary: #1e1e1e;
-            --bg-tertiary: #2d2d2d;
+            --bg-secondary: #252525;
+            --bg-tertiary: #323232;
             --bg-chat: #1e1e1e;
-            --border-color: #3d3d3d;
-            --text-primary: #e0e0e0;
+            --border-color: #4a4a4a;
+            --text-primary: #e8e8e8;
             --text-secondary: #a0a0a0;
             --text-accent: #b0b0b0;
-            --btn-primary: #b0b0b0;
-            --btn-secondary: #3d3d3d;
+            --btn-primary: #4F46E5;
+            --btn-secondary: #4a4a4a;
             --btn-danger: #dc3545;
             --status-unauth: #dc3545;
             --status-auth: #28a745;
-            --cmd-bg: #1a1a1a;
+            --cmd-bg: #2a2a2a;
             --modal-bg: #1e1e1e;
             --spinner-border: #3d3d3d;
             --spinner-color: #b0b0b0;
+            --msg-user-bg: #2a3a5c;
+            --msg-ai-bg: #2a2a2a;
+            --file-selected-bg: #2a3a5c;
         }
 
         * {
@@ -73,6 +79,10 @@
         .header-info {
             font-size: 0.85rem;
             color: var(--text-secondary);
+        }
+        .header-buttons {
+            display: flex;
+            gap: 8px;
         }
         .main-container {
             flex: 1;
@@ -108,11 +118,11 @@
             tab-size: 4;
         }
         .message.user {
-            background: var(--bg-secondary);
+            background: var(--msg-user-bg);
             margin-left: auto;
         }
         .message.ai {
-            background: var(--bg-tertiary);
+            background: var(--msg-ai-bg);
         }
         .message.system {
             background: var(--cmd-bg);
@@ -217,6 +227,17 @@
             border-left: 1px solid var(--border-color);
             padding: 20px;
             overflow-y: auto;
+            position: fixed;
+            right: 0;
+            top: 60px;
+            bottom: 0;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            z-index: 100;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+        }
+        .sidebar.visible {
+            transform: translateX(0);
         }
         .sidebar h3 {
             font-size: 1rem;
@@ -368,6 +389,134 @@
             0%, 80%, 100% { transform: scale(0); }
             40% { transform: scale(1); }
         }
+        .command-panel {
+            display: none;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 15px 20px;
+        }
+        .command-panel.visible {
+            display: block;
+        }
+        .command-input-area {
+            display: flex;
+            gap: 10px;
+        }
+        #commandInput {
+            flex: 1;
+            padding: 10px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+        #commandInput:focus {
+            outline: none;
+            border-color: var(--btn-primary);
+        }
+        .files-panel {
+            display: none;
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-primary);
+            z-index: 200;
+            flex-direction: column;
+            padding: 20px;
+        }
+        .files-panel.visible {
+            display: flex;
+        }
+        .files-toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .files-path {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border-radius: 5px;
+        }
+        .files-list {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-chat);
+        }
+        .files-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+        }
+        .files-item:last-child {
+            border-bottom: none;
+        }
+        .files-item:hover {
+            background: var(--bg-secondary);
+        }
+        .files-item.selected {
+            background: var(--file-selected-bg);
+        }
+        .files-item-icon {
+            margin-right: 10px;
+            font-size: 1.1rem;
+        }
+        .files-item-name {
+            flex: 1;
+        }
+        .files-item-size {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-left: 10px;
+        }
+        .files-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+        }
+        .files-modal.show {
+            display: flex;
+        }
+        .files-modal-content {
+            background: var(--modal-bg);
+            padding: 25px;
+            border-radius: 12px;
+            min-width: 300px;
+        }
+        .files-modal-content h3 {
+            margin-bottom: 15px;
+            color: var(--text-accent);
+        }
+        .files-modal-content input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+        .files-modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
     </style>
 </head>
 <body>
@@ -376,6 +525,48 @@
         <div class="header-info">
             <span id="modelName">Model: --</span> | 
             <span id="authMode">Auth: Always</span>
+        </div>
+        <div class="header-buttons">
+            <button class="btn btn-secondary" id="commandToggleBtn" style="padding: 8px 12px; font-size: 0.85rem;">
+                Command
+            </button>
+            <button class="btn btn-secondary" id="filesToggleBtn" style="padding: 8px 12px; font-size: 0.85rem;">
+                FileManager
+            </button>
+            <button class="btn btn-secondary" id="sidebarToggleBtn" style="padding: 8px 12px; font-size: 0.85rem;">
+                Controls
+            </button>
+        </div>
+    </div>
+
+    <div class="command-panel" id="commandPanel">
+        <div class="command-input-area">
+            <input type="text" id="commandInput" placeholder="Enter command..." autocomplete="off">
+            <button class="btn btn-primary" id="commandExecuteBtn">Execute</button>
+        </div>
+    </div>
+
+    <div class="files-panel" id="filesPanel">
+        <div class="files-toolbar">
+            <button class="btn btn-secondary" id="filesParentBtn">Parent Dir</button>
+            <button class="btn btn-secondary" id="filesNewBtn">New File</button>
+            <button class="btn btn-secondary" id="filesDeleteBtn">Delete</button>
+            <button class="btn btn-secondary" id="filesUploadBtn">Upload</button>
+            <button class="btn btn-secondary" id="filesDownloadBtn">Download</button>
+            <input type="file" id="filesUploadInput" style="display: none;">
+        </div>
+        <div class="files-path" id="filesPath"></div>
+        <div class="files-list" id="filesList"></div>
+    </div>
+
+    <div class="files-modal" id="filesModal">
+        <div class="files-modal-content">
+            <h3 id="filesModalTitle">New File</h3>
+            <input type="text" id="filesModalInput" placeholder="Enter filename...">
+            <div class="files-modal-actions">
+                <button class="btn btn-secondary" id="filesModalCancel">Cancel</button>
+                <button class="btn btn-primary" id="filesModalConfirm">Create</button>
+            </div>
         </div>
     </div>
 
@@ -399,7 +590,7 @@
             </div>
         </div>
 
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
             <div class="theme-toggle">
                 <button class="btn btn-secondary" id="themeToggle" style="width: 100%;">
                     Switch to Dark Mode
@@ -871,6 +1062,286 @@
         chatBox.addEventListener('scroll', () => {
             const isAtBottom = chatBox.scrollHeight - chatBox.clientHeight - chatBox.scrollTop < 50;
             autoScrollEnabled = isAtBottom;
+        });
+
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+
+        const commandToggleBtn = document.getElementById('commandToggleBtn');
+        const commandPanel = document.getElementById('commandPanel');
+        const commandInput = document.getElementById('commandInput');
+        const commandExecuteBtn = document.getElementById('commandExecuteBtn');
+
+        function closeAllPanels() {
+            sidebar.classList.remove('visible');
+            commandPanel.classList.remove('visible');
+            filesPanel.classList.remove('visible');
+        }
+
+        sidebarToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (sidebar.classList.contains('visible')) {
+                closeAllPanels();
+            } else {
+                closeAllPanels();
+                sidebar.classList.add('visible');
+            }
+        });
+
+        commandToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (commandPanel.classList.contains('visible')) {
+                closeAllPanels();
+            } else {
+                closeAllPanels();
+                commandPanel.classList.add('visible');
+                commandInput.focus();
+            }
+        });
+
+        const filesToggleBtn = document.getElementById('filesToggleBtn');
+        const filesPanel = document.getElementById('filesPanel');
+        const filesList = document.getElementById('filesList');
+        const filesPath = document.getElementById('filesPath');
+        const filesModal = document.getElementById('filesModal');
+        const filesModalTitle = document.getElementById('filesModalTitle');
+        const filesModalInput = document.getElementById('filesModalInput');
+        const filesModalConfirm = document.getElementById('filesModalConfirm');
+        const filesModalCancel = document.getElementById('filesModalCancel');
+        const filesUploadInput = document.getElementById('filesUploadInput');
+
+        let selectedFile = null;
+        let filesModalCallback = null;
+
+        filesToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (filesPanel.classList.contains('visible')) {
+                closeAllPanels();
+            } else {
+                closeAllPanels();
+                filesPanel.classList.add('visible');
+                loadFilesList();
+            }
+        });
+
+        async function loadFilesList() {
+            try {
+                const res = await fetch('/api/files/list');
+                const data = await res.json();
+                if (data.error) {
+                    filesPath.textContent = 'Error: ' + data.error;
+                    filesList.innerHTML = '';
+                    return;
+                }
+                filesPath.textContent = data.current_path;
+                filesList.innerHTML = '';
+                selectedFile = null;
+                
+                data.items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'files-item';
+                    div.dataset.name = item.name;
+                    div.dataset.isDir = item.is_dir;
+                    div.innerHTML = `
+                        <span class="files-item-icon">${item.is_dir ? '📁' : '📄'}</span>
+                        <span class="files-item-name">${item.name}</span>
+                        <span class="files-item-size">${item.is_dir ? '' : formatSize(item.size)}</span>
+                    `;
+                    div.addEventListener('click', () => {
+                        selectFile(div, item);
+                    });
+                    div.addEventListener('dblclick', async () => {
+                        if (item.is_dir) {
+                            try {
+                                const formData = new FormData();
+                                formData.append('dirname', item.name);
+                                const res = await fetch('/api/files/chdir', { method: 'POST', body: formData });
+                                const result = await res.json();
+                                if (result.error) {
+                                    filesPath.textContent = 'Error: ' + result.error;
+                                } else {
+                                    await loadFilesList();
+                                }
+                            } catch (err) {
+                                filesPath.textContent = 'Error: ' + err.message;
+                            }
+                        }
+                    });
+                    filesList.appendChild(div);
+                });
+            } catch (err) {
+                filesPath.textContent = 'Error: ' + err.message;
+            }
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+        }
+
+        function selectFile(element, item) {
+            document.querySelectorAll('.files-item.selected').forEach(el => el.classList.remove('selected'));
+            element.classList.add('selected');
+            selectedFile = item;
+        }
+
+        document.getElementById('filesParentBtn').addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/files/parent', { method: 'POST' });
+                const data = await res.json();
+                if (data.error) {
+                    filesPath.textContent = 'Error: ' + data.error;
+                } else {
+                    await loadFilesList();
+                }
+            } catch (err) {
+                filesPath.textContent = 'Error: ' + err.message;
+            }
+        });
+
+        document.getElementById('filesNewBtn').addEventListener('click', () => {
+            filesModalTitle.textContent = 'New File';
+            filesModalInput.value = 'NewFile';
+            filesModalConfirm.textContent = 'Create';
+            filesModalCallback = async (filename) => {
+                if (!filename) filename = 'NewFile';
+                try {
+                    const formData = new FormData();
+                    formData.append('filename', filename);
+                    await fetch('/api/files/new', { method: 'POST', body: formData });
+                    await loadFilesList();
+                } catch (err) {}
+            };
+            filesModal.classList.add('show');
+            filesModalInput.focus();
+            filesModalInput.select();
+        });
+
+        document.getElementById('filesDeleteBtn').addEventListener('click', async () => {
+            if (!selectedFile) {
+                alert('Please select a file or directory to delete.');
+                return;
+            }
+            if (!confirm(`Delete "${selectedFile.name}"?`)) return;
+            try {
+                const formData = new FormData();
+                formData.append('filepath', filesPath.textContent + '/' + selectedFile.name);
+                const res = await fetch('/api/files/delete', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    await loadFilesList();
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        });
+
+        document.getElementById('filesUploadBtn').addEventListener('click', () => {
+            filesUploadInput.click();
+        });
+
+        filesUploadInput.addEventListener('change', async () => {
+            const file = filesUploadInput.files[0];
+            if (!file) return;
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const res = await fetch('/api/files/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    await loadFilesList();
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+            filesUploadInput.value = '';
+        });
+
+        document.getElementById('filesDownloadBtn').addEventListener('click', () => {
+            if (!selectedFile || selectedFile.is_dir) {
+                alert('Please select a file to download.');
+                return;
+            }
+            const path = filesPath.textContent + '/' + selectedFile.name;
+            window.open('/api/files/download?path=' + encodeURIComponent(path), '_blank');
+        });
+
+        filesModalCancel.addEventListener('click', () => {
+            filesModal.classList.remove('show');
+        });
+
+        filesModalConfirm.addEventListener('click', () => {
+            const value = filesModalInput.value.trim();
+            if (filesModalCallback) {
+                filesModalCallback(value);
+            }
+            filesModal.classList.remove('show');
+        });
+
+        filesModalInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                filesModalConfirm.click();
+            }
+        });
+
+        function formatCommandResult(ex) {
+            const action = ex.action;
+            const params = ex.params || {};
+            if (action === 'exec_cmd') {
+                const cmdStr = params.command || '';
+                return `[${action}] [${cmdStr}]\n${ex.result}`;
+            } else if (action === 'write_file') {
+                const path = params.path || '';
+                return `[${action}] [${path}]\n${ex.result}`;
+            } else {
+                const path = params.path || '';
+                return `[${action}] [${path}]\n${ex.result}`;
+            }
+        }
+
+        async function executeDirectCommand(cmd) {
+            try {
+                const formData = new FormData();
+                formData.append('command', cmd);
+
+                const res = await fetch('/api/exec-cmd', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    return `[exec_cmd] [${cmd}]\nError: ${data.error}`;
+                } else {
+                    return `[exec_cmd] [${cmd}]\n${data.result}`;
+                }
+            } catch (err) {
+                return `[exec_cmd] [${cmd}]\nError: ${err.message}`;
+            }
+        }
+
+        async function sendDirectCommand() {
+            const cmd = commandInput.value.trim();
+            if (!cmd) return;
+
+            addMessage(cmd, 'user');
+            commandInput.value = '';
+
+            commandExecuteBtn.disabled = true;
+            const result = await executeDirectCommand(cmd);
+            addMessage(result, 'system');
+            commandExecuteBtn.disabled = false;
+        }
+
+        commandExecuteBtn.addEventListener('click', sendDirectCommand);
+        commandInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendDirectCommand();
         });
 
         loadConfig();

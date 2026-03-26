@@ -195,7 +195,7 @@ def main():
 
             tool.llm.conversation_history.append({"role": "user", "content": user_input})
 
-            max_iterations = 20
+            max_iterations = tool.config.round_limit
             iteration = 0
 
             while iteration < max_iterations:

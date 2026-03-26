@@ -13,7 +13,7 @@ else:
 
 sys.path.insert(0, base_path)
 
-from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi import FastAPI, Request, Form, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 import uvicorn
 
@@ -57,6 +57,7 @@ class WebServer:
         self.auth_result = None
         self.auth_commands = None
         self.auth_received = False
+        self.current_path = Path.cwd()
 
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             self.web_dir = Path(sys._MEIPASS) / "web"
@@ -116,7 +117,7 @@ class WebServer:
 
                 self.llm.conversation_history.append({"role": "user", "content": message})
 
-                max_iterations = 20
+                max_iterations = self.config.round_limit
                 iteration = 0
 
                 while iteration < max_iterations:
@@ -273,6 +274,15 @@ class WebServer:
             except Exception as e:
                 return JSONResponse({"result": None, "error": str(e)})
 
+        @self.app.post("/api/exec-cmd")
+        async def exec_cmd(command: str = Form(...)):
+            try:
+                result = self.executor.execute("exec_cmd", {"command": command})
+                self.session_authorized = True
+                return JSONResponse({"result": result, "error": None})
+            except Exception as e:
+                return JSONResponse({"result": None, "error": str(e)})
+
         @self.app.post("/api/authorize-execute")
         async def authorize_execute(authorized: str = Form(...), commands: str = Form(...)):
             try:
@@ -298,7 +308,7 @@ class WebServer:
                 result_text = "\n".join([self.format_command_result(ex) for ex in results])
                 self.llm.conversation_history.append({"role": "user", "content": f"Command execution result:\n{result_text}"})
 
-                max_iterations = 20
+                max_iterations = self.config.round_limit
                 iteration = 0
                 all_commands = []
 
@@ -351,12 +361,115 @@ class WebServer:
         async def reset():
             self.llm.reset_conversation()
             self.session_authorized = False
+            self.auth_mode = AuthMode.ALWAYS
             self.current_commands = []
             return {"success": True}
 
         @self.app.get("/api/history")
         async def get_history():
             return {"history": self.llm.conversation_history}
+
+        @self.app.get("/api/files/list")
+        async def list_files():
+            try:
+                items = []
+                for item in self.current_path.iterdir():
+                    items.append({
+                        "name": item.name,
+                        "is_dir": item.is_dir(),
+                        "size": item.stat().st_size if item.is_file() else 0
+                    })
+                return JSONResponse({
+                    "current_path": str(self.current_path),
+                    "items": items,
+                    "error": None
+                })
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.app.post("/api/files/parent")
+        async def parent_dir():
+            try:
+                if self.current_path.parent != self.current_path:
+                    self.current_path = self.current_path.parent
+                return JSONResponse({
+                    "current_path": str(self.current_path),
+                    "error": None
+                })
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.app.post("/api/files/chdir")
+        async def chdir(dirname: str = Form(...)):
+            try:
+                target = self.current_path / dirname
+                if not target.exists() or not target.is_dir():
+                    return JSONResponse({"error": "Directory not found"}, status_code=404)
+                self.current_path = target.resolve()
+                return JSONResponse({
+                    "current_path": str(self.current_path),
+                    "error": None
+                })
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.app.post("/api/files/new")
+        async def new_file(filename: str = Form(...)):
+            try:
+                file_path = self.current_path / filename
+                file_path.touch()
+                return JSONResponse({
+                    "path": str(file_path),
+                    "error": None
+                })
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.app.post("/api/files/delete")
+        async def delete_file(filepath: str = Form(...)):
+            try:
+                target = Path(filepath)
+                if not target.is_relative_to(self.current_path):
+                    return JSONResponse({"error": "Access denied"}, status_code=403)
+                if target.exists():
+                    if target.is_dir():
+                        import shutil
+                        shutil.rmtree(target)
+                    else:
+                        target.unlink()
+                    return JSONResponse({"success": True, "error": None})
+                return JSONResponse({"error": "File not found"}, status_code=404)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.app.get("/api/files/download")
+        async def download_file(path: str = None):
+            try:
+                if not path:
+                    return JSONResponse({"error": "Path required"}, status_code=400)
+                file_path = Path(path)
+                if not file_path.is_relative_to(self.current_path):
+                    return JSONResponse({"error": "Access denied"}, status_code=403)
+                if not file_path.exists() or not file_path.is_file():
+                    return JSONResponse({"error": "File not found"}, status_code=404)
+                return FileResponse(str(file_path), filename=file_path.name)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.app.post("/api/files/upload")
+        async def upload_file(file: UploadFile = File(...)):
+            try:
+                file_path = self.current_path / file.filename
+                content = await file.read()
+                with open(file_path, "wb") as f:
+                    f.write(content)
+                return JSONResponse({
+                    "path": str(file_path),
+                    "filename": file.filename,
+                    "error": None
+                })
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
 
     def process_message(self, message: str):
         llm_response = self.llm.send_message(message)

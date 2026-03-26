@@ -9,6 +9,8 @@
 - 授权模式：每次询问或会话授权
 - CLI 和 Web 界面
 - 文件操作和命令执行
+- 多轮对话：AI 可根据执行结果自动继续执行（最多 20 轮）
+- Web 界面：FileManager 文件管理器、Command 命令执行面板
 
 ## 安装
 
@@ -25,10 +27,19 @@ pip install -r requirements.txt
     "api_base": "http://localhost:11434/v1",
     "api_key": "ollama",
     "model": "llama3.2",
+    "round_limit": 20,
     "listen_host": "127.0.0.1",
     "listen_port": 8880
 }
 ```
+
+**配置项说明：**
+- `api_base`：LLM API 地址
+- `api_key`：API 密钥
+- `model`：模型名称
+- `round_limit`：多轮对话最大轮数，默认 20
+- `listen_host`：Web 服务监听地址
+- `listen_port`：Web 服务监听端口
 
 ## 使用方法
 
@@ -49,6 +60,17 @@ python -m src.main --mode web
 然后在浏览器中打开 http://127.0.0.1:8880
 
 ![主界面](./Docs/main.png)
+
+### Web 界面功能
+
+- **Controls 控制面板**：主题切换、授权模式设置、会话重置
+- **Command 命令面板**：直接输入 shell 命令执行
+- **FileManager 文件管理器**：
+  - 浏览目录（单击选中，双击进入目录）
+  - 新建文件、删除文件/目录
+  - 上传和下载文件
+
+点击标题栏右侧按钮可打开对应面板，同时只能打开一个面板。
 
 ### 自定义配置
 

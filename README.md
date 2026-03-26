@@ -11,6 +11,8 @@ A local AI assistant that connects to remote LLM APIs and executes commands on y
 - Authorization modes: Always ask or Session-based
 - CLI and Web interface
 - File operations and command execution
+- Multi-turn conversation: AI can continue executing based on results (up to 20 rounds)
+- Web interface: FileManager, Command panel
 
 ## Setup
 
@@ -27,10 +29,19 @@ Edit `config.json`:
     "api_base": "http://localhost:11434/v1",
     "api_key": "ollama",
     "model": "llama3.2",
+    "round_limit": 20,
     "listen_host": "127.0.0.1",
     "listen_port": 8880
 }
 ```
+
+**Configuration options:**
+- `api_base`: LLM API address
+- `api_key`: API key
+- `model`: Model name
+- `round_limit`: Max conversation rounds (default: 20)
+- `listen_host`: Web server listen address
+- `listen_port`: Web server listen port
 
 ## Usage
 
@@ -52,7 +63,16 @@ Then open http://127.0.0.1:8880 in your browser.
 
 ![Main Interface](./Docs/main.png)
 
-### Custom Configuration
+### Web Interface Features
+
+- **Controls panel**: Theme toggle, auth mode, conversation reset
+- **Command panel**: Execute shell commands directly
+- **FileManager**:
+  - Browse directories (click to select, double-click to enter)
+  - Create new files, delete files/directories
+  - Upload and download files
+
+Click the buttons on the right side of the header to open panels. Only one panel can be open at a time.
 
 Use `--config` to specify a custom configuration file path (must be absolute path):
 
