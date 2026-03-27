@@ -402,7 +402,10 @@ class WebServer:
         @self.app.post("/api/files/chdir")
         async def chdir(dirname: str = Form(...)):
             try:
-                target = self.current_path / dirname
+                if Path(dirname).is_absolute():
+                    target = Path(dirname)
+                else:
+                    target = self.current_path / dirname
                 if not target.exists() or not target.is_dir():
                     return JSONResponse({"error": "Directory not found"}, status_code=404)
                 self.current_path = target.resolve()
