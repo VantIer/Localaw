@@ -858,6 +858,9 @@
                                     case 'answering':
                                         answeringIndicator.classList.add('show');
                                         answeringText.textContent = `AI is thinking... (Round ${data.iteration})`;
+                                        if (data.iteration > 1) {
+                                            aiContentSpan.textContent += '\n\n';
+                                        }
                                         break;
 
                                     case 'chunk':
