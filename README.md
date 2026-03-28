@@ -45,6 +45,8 @@ Edit `config.json`:
 
 ## Usage
 
+> **Python Version Requirement**: This project uses asynchronous execution to implement command authorization. Python 3.10 or higher is required. Version 3.9 or lower will cause loss of per-command verification capability in Web mode, and can only use session verification.
+
 ### CLI Mode
 
 ```bash
