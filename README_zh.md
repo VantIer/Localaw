@@ -34,6 +34,7 @@ pip install -r requirements.txt
 ```
 
 **配置项说明：**
+
 - `api_base`：LLM API 地址
 - `api_key`：API 密钥
 - `model`：模型名称
@@ -42,8 +43,6 @@ pip install -r requirements.txt
 - `listen_port`：Web 服务监听端口
 
 ## 使用方法
-
-> **Python 版本要求**：由于使用了异步执行以实现指令许可机制，所以需要使用 Python 3.10 以上版本，3.9 及以下会使其在 Web 模式下失去对每条指令的验证能力，只能使用会话验证。
 
 ### CLI 模式
 
@@ -93,11 +92,13 @@ Localaw.exe --mode web --config D:\MyConfigs\localaw.json
 ### 启动脚本
 
 Windows:
+
 ```bash
 start.bat
 ```
 
 Linux/Mac:
+
 ```bash
 bash start.sh
 ```
@@ -105,11 +106,17 @@ bash start.sh
 ## 支持的命令
 
 AI 可以请求执行以下命令：
-- `list_dir` - 列出目录内容
-- `read_file` - 读取文件内容
-- `delete_file` - 删除文件/目录
-- `write_file` - 写入文件
-- `exec_cmd` - 执行 shell 命令
+
+- `list_dir` - 列出目录内容（参数：path）
+- `make_dir` - 创建目录（参数：path）
+- `delete_dir` - 删除目录（参数：path）
+- `rename_dir` - 重命名目录（参数：path, new_name）
+- `read_file` - 读取文件内容（参数：path, start_line, end_line）
+- `write_file` - 写入文件（参数：path, content）
+- `delete_file` - 删除文件/目录（参数：path）
+- `edit_file` - 编辑文件（参数：path, operation, start_line, end_line, content）
+- `rename_file` - 重命名文件（参数：path, new_name）
+- `exec_cmd` - 执行 shell 命令（参数：command）
 
 ## 免责声明
 
@@ -124,14 +131,17 @@ AI 可以请求执行以下命令：
 ## 测试状态
 
 **平台：**
+
 - Windows：已测试
 - Linux：已测试
 
 **AI 提供商：**
+
 - DeepSeek：已测试
 - Minimax：已测试
 - 其他提供商（OpenAI、Ollama 等）：未测试
 
 **界面：**
+
 - Web 模式：已测试
 - CLI 模式：已测试

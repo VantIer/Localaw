@@ -36,6 +36,7 @@ Edit `config.json`:
 ```
 
 **Configuration options:**
+
 - `api_base`: LLM API address
 - `api_key`: API key
 - `model`: Model name
@@ -44,8 +45,6 @@ Edit `config.json`:
 - `listen_port`: Web server listen port
 
 ## Usage
-
-> **Python Version Requirement**: This project uses asynchronous execution to implement command authorization. Python 3.10 or higher is required. Version 3.9 or lower will cause loss of per-command verification capability in Web mode, and can only use session verification.
 
 ### CLI Mode
 
@@ -93,11 +92,13 @@ Localaw.exe --mode web --config D:\MyConfigs\localaw.json
 ### Startup Scripts
 
 Windows:
+
 ```bash
 start.bat
 ```
 
 Linux/Mac:
+
 ```bash
 bash start.sh
 ```
@@ -105,11 +106,17 @@ bash start.sh
 ## Supported Commands
 
 The AI can request these commands:
-- `list_dir` - List directory contents
-- `read_file` - Read file contents
-- `delete_file` - Delete files/directories
-- `write_file` - Write files
-- `exec_cmd` - Execute shell commands
+
+- `list_dir` - List directory contents (params: path)
+- `make_dir` - Create directory (params: path)
+- `delete_dir` - Delete directory (params: path)
+- `rename_dir` - Rename directory (params: path, new_name)
+- `read_file` - Read file contents (params: path, start_line, end_line)
+- `write_file` - Write files (params: path, content)
+- `delete_file` - Delete files/directories (params: path)
+- `edit_file` - Edit file (params: path, operation, start_line, end_line, content)
+- `rename_file` - Rename file (params: path, new_name)
+- `exec_cmd` - Execute shell commands (params: command)
 
 ## Disclaimer
 
@@ -124,14 +131,17 @@ The AI can request these commands:
 ## Testing Status
 
 **Platforms:**
+
 - Windows: Tested
 - Linux: Tested
 
 **AI Providers:**
+
 - DeepSeek: Tested
 - Minimax: Tested
 - Other providers (OpenAI, Ollama, etc.): Not tested
 
 **Interfaces:**
+
 - Web Mode: Tested
 - CLI Mode: Tested

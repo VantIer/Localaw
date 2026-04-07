@@ -1,22 +1,25 @@
 import json
 import re
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from openai import OpenAI
 
 
 class Command:
     LIST_DIR = "list_dir"
+    MAKE_DIR = "make_dir"
+    DELETE_DIR = "delete_dir"
+    RENAME_DIR = "rename_dir"
     READ_FILE = "read_file"
-    DELETE_FILE = "delete_file"
     WRITE_FILE = "write_file"
+    DELETE_FILE = "delete_file"
+    EDIT_FILE = "edit_file"
+    RENAME_FILE = "rename_file"
     EXEC_CMD = "exec_cmd"
 
 
 class CommandParser:
-    PATTERN = re.compile(
-        r'```(?:json)?\s*\n?(.*?)\n?```',
-        re.DOTALL
-    )
+    PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)\n?```", re.DOTALL)
 
     @staticmethod
     def parse(text: str) -> Optional[List[Dict[str, Any]]]:
@@ -39,10 +42,7 @@ class CommandParser:
 class LLMClient:
     def __init__(self, config):
         self.config = config
-        self.client = OpenAI(
-            base_url=config.api_base,
-            api_key=config.api_key
-        )
+        self.client = OpenAI(base_url=config.api_base, api_key=config.api_key)
         self.conversation_history: List[Dict[str, str]] = []
 
     def set_system_prompt(self, prompt: str):
@@ -50,21 +50,21 @@ class LLMClient:
 
     def send_message(self, message: str) -> str:
         self.conversation_history.append({"role": "user", "content": message})
-        
+
         messages = [{"role": "system", "content": self.config.system_prompt}]
         messages.extend(self.conversation_history)
 
         try:
             response = self.client.chat.completions.create(
-                model=self.config.model,
-                messages=messages,
-                temperature=0.7
+                model=self.config.model, messages=messages, temperature=0.7
             )
-            
+
             assistant_message = response.choices[0].message.content
             if assistant_message is None:
                 assistant_message = ""
-            self.conversation_history.append({"role": "assistant", "content": assistant_message})
+            self.conversation_history.append(
+                {"role": "assistant", "content": assistant_message}
+            )
             return assistant_message
         except Exception as e:
             self.conversation_history.pop()
