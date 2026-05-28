@@ -21,8 +21,6 @@
             --status-auth: #28a745;
             --cmd-bg: #e8e8e8;
             --modal-bg: #ffffff;
-            --spinner-border: #e0e0e0;
-            --spinner-color: #444;
             --msg-user-bg: #dde4ff;
             --msg-ai-bg: #f0f0f0;
             --file-selected-bg: #dde4ff;
@@ -44,8 +42,6 @@
             --status-auth: #28a745;
             --cmd-bg: #2a2a2a;
             --modal-bg: #1e1e1e;
-            --spinner-border: #3d3d3d;
-            --spinner-color: #b0b0b0;
             --msg-user-bg: #2a3a5c;
             --msg-ai-bg: #2a2a2a;
             --file-selected-bg: #2a3a5c;
@@ -316,10 +312,6 @@
         .modal-cmd-item:last-child {
             border-bottom: none;
         }
-        .modal-cmd-item input[type="checkbox"] {
-            margin-top: 3px;
-            cursor: pointer;
-        }
         .modal-cmd-item .cmd-info {
             flex: 1;
         }
@@ -337,26 +329,6 @@
             gap: 10px;
             justify-content: flex-end;
             margin-top: 20px;
-        }
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-        .loading.show {
-            display: block;
-        }
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid var(--spinner-border);
-            border-top-color: var(--spinner-color);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
         }
         .answering-indicator {
             display: none;
@@ -555,7 +527,7 @@
         <h1>Localaw</h1>
         <div class="header-info">
             <span id="modelName">Model: --</span> | 
-            <span id="authMode">Auth: Always</span>
+            <span id="authMode">Auth: Required</span>
         </div>
         <div class="header-buttons">
             <button class="btn btn-secondary" id="commandToggleBtn" style="padding: 8px 12px; font-size: 0.85rem;">
@@ -626,10 +598,6 @@
         <div class="chat-container">
             <div class="chat-box" id="chatBox">
             </div>
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <div>Processing...</div>
-            </div>
             <div class="answering-indicator" id="answeringIndicator">
                 <div class="answering-dots">
                     <span></span><span></span><span></span>
@@ -653,14 +621,14 @@
                 <h3>Authorization</h3>
                 <div class="auth-status">
                     <div class="status-dot" id="authDot"></div>
-                    <span id="authStatus">Not Authorized</span>
+                    <span id="authStatus">Authorization Required</span>
                 </div>
                 <button class="btn btn-secondary" id="authToggle" style="width: 100%; margin-top: 10px;">
-                    Enable Session Auth
+                    Enable Auto Auth
                 </button>
             </div>
 
-            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #333;">
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
                 <button class="btn btn-danger" id="resetBtn" style="width: 100%;">
                     Reset Conversation
                 </button>
@@ -671,28 +639,21 @@
     <div class="modal" id="cmdModal">
         <div class="modal-content">
             <h3>Command Authorization</h3>
-            <p>The AI has requested to execute the following commands:</p>
+            <p>The AI has requested to execute the following command:</p>
             <div class="modal-commands" id="modalCommands"></div>
-            <p>Select commands to authorize:</p>
             <div class="modal-actions">
-                <button class="btn btn-secondary" id="modalCancel">Cancel</button>
-                <button class="btn btn-secondary" id="modalSelectAll">Select All</button>
-                <button class="btn btn-primary" id="modalAuthorizeSelected">Authorize Selected</button>
+                <button class="btn btn-danger" id="modalDeny">Deny</button>
+                <button class="btn btn-primary" id="modalAuthorize">Authorize</button>
             </div>
         </div>
     </div>
 
     <script>
-        let currentCommands = [];
-        let needAuth = false;
-        let sessionAuthorized = false;
-        let pendingAuthCommands = null;
-        let modalCommandsList = [];
+        let pendingCommand = null;
 
         const chatBox = document.getElementById('chatBox');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
-        const loading = document.getElementById('loading');
         const cmdModal = document.getElementById('cmdModal');
         const modalCommands = document.getElementById('modalCommands');
         const authDot = document.getElementById('authDot');
@@ -706,43 +667,30 @@
             const res = await fetch('/api/config');
             const config = await res.json();
             document.getElementById('modelName').textContent = 'Model: ' + config.model;
-            sessionAuthorized = config.session_authorized;
-            updateAuthUI(config.auth_mode, config.session_authorized);
+            updateAuthUI(config.auth_mode);
         }
 
-        function updateAuthUI(mode, sessionAuth) {
-            document.getElementById('authMode').textContent = 'Auth: ' + (mode === 'session' ? 'Session' : 'Always');
-            if (sessionAuth && mode === 'session') {
+        function updateAuthUI(authMode) {
+            const isAuto = authMode === 1;
+            document.getElementById('authMode').textContent = 'Auth: ' + (isAuto ? 'Auto' : 'Required');
+            if (isAuto) {
                 authDot.classList.add('authorized');
-                authStatus.textContent = 'Session Authorized';
-                authToggle.textContent = 'Disable Session Auth';
+                authStatus.textContent = 'Auto Authorized';
+                authToggle.textContent = 'Require Authorization';
             } else {
                 authDot.classList.remove('authorized');
-                authStatus.textContent = 'Not Authorized';
-                authToggle.textContent = 'Enable Session Auth';
+                authStatus.textContent = 'Authorization Required';
+                authToggle.textContent = 'Enable Auto Auth';
             }
         }
 
-        function extractTextContent(text) {
-            if (!text) return '';
-            const str = String(text);
-            try {
-                if (str.startsWith('{') && str.endsWith('}')) {
-                    const obj = JSON.parse(str);
-                    if (obj.content && typeof obj.content === 'string') {
-                        return obj.content;
-                    }
-                }
-            } catch {}
-            return str;
-        }
+        let autoScrollEnabled = true;
 
         function addMessage(content, type, commands = null) {
-            if (content === null || content === undefined) content = '';
             const div = document.createElement('div');
             div.className = 'message ' + type;
-            
-            let displayText = extractTextContent(content);
+
+            let displayText = String(content ?? '');
             
             if (commands && commands.length > 0) {
                 const parts = displayText.split(/(```json\n?[\s\S]*?```)/g);
@@ -802,14 +750,6 @@
             }
         }
 
-        let autoScrollEnabled = true;
-
-        function showLoading(show) {
-            loading.classList.toggle('show', show);
-            sendBtn.disabled = show;
-            messageInput.disabled = show;
-        }
-
         async function sendMessage() {
             const msg = messageInput.value.trim();
             if (!msg) return;
@@ -825,8 +765,7 @@
             aiMsgDiv.appendChild(aiContentSpan);
             chatBox.appendChild(aiMsgDiv);
 
-            pendingAuthCommands = null;
-            modalCommandsList = [];
+            pendingCommand = null;
 
             try {
                 const formData = new FormData();
@@ -872,22 +811,15 @@
 
                                     case 'response_done':
                                         answeringIndicator.classList.remove('show');
-                                        if (data.commands && data.commands.length > 0) {
-                                            currentCommands = data.commands;
-                                            if (data.iteration === 1 && data.commands.length > 0 && !sessionAuthorized) {
-                                                pendingAuthCommands = data.commands;
-                                            }
-                                        }
                                         break;
 
                                     case 'auth_required':
                                         answeringIndicator.classList.remove('show');
-                                        modalCommandsList = [...data.commands];
-                                        currentCommands = [...data.commands];
+                                        pendingCommand = data.commands[0];
                                         break;
 
                                     case 'waiting_auth':
-                                        showCommandModal(modalCommandsList.length > 0 ? modalCommandsList : currentCommands);
+                                        showCommandModal(pendingCommand);
                                         break;
 
                                     case 'executing':
@@ -912,7 +844,7 @@
                                         break;
 
                                     case 'done':
-                                        pendingAuthCommands = null;
+                                        pendingCommand = null;
                                         break;
 
                                     case 'error':
@@ -934,107 +866,41 @@
                 addMessage('Error: ' + err.message, 'system');
                 answeringIndicator.classList.remove('show');
             } finally {
-                pendingAuthCommands = null;
-                modalCommandsList = [];
-                currentCommands = [];
+                pendingCommand = null;
             }
         }
 
-        function showCommandModal(commands) {
+        function showCommandModal(cmd) {
             modalCommands.innerHTML = '';
-            commands.forEach((cmd, index) => {
+            if (cmd) {
                 const item = document.createElement('div');
                 item.className = 'modal-cmd-item';
                 item.innerHTML = `
-                    <input type="checkbox" id="cmd-${index}" checked>
                     <div class="cmd-info">
-                        <div class="cmd-action">${index + 1}. ${cmd.action}</div>
+                        <div class="cmd-action">${cmd.action}</div>
                         <div class="cmd-params">${JSON.stringify(cmd, null, 2).replace(/\n/g, '<br>')}</div>
                     </div>
                 `;
                 modalCommands.appendChild(item);
-            });
+            }
             cmdModal.classList.add('show');
         }
 
-        async function executeSelectedCommands(selectedIndices) {
-            const commandsToExecute = modalCommandsList.length > 0 ? modalCommandsList : (currentCommands.length > 0 ? currentCommands : pendingAuthCommands);
-            
-            if (!commandsToExecute || commandsToExecute.length === 0) {
-                addMessage('Error: No commands available. Please try again.', 'system');
-                cmdModal.classList.remove('show');
-                try {
-                    const formData = new FormData();
-                    formData.append('authorized', 'false');
-                    formData.append('commands', JSON.stringify([]));
-                    await fetch('/api/authorize-execute', {
-                        method: 'POST',
-                        body: formData
-                    });
-                } catch (e) {}
-                modalCommandsList = [];
-                currentCommands = [];
-                pendingAuthCommands = null;
-                return;
-            }
-
-            if (selectedIndices.length === 0) {
-                addMessage('No commands selected.', 'system');
-                cmdModal.classList.remove('show');
-                try {
-                    const formData = new FormData();
-                    formData.append('authorized', 'false');
-                    formData.append('commands', JSON.stringify([]));
-                    await fetch('/api/authorize-execute', {
-                        method: 'POST',
-                        body: formData
-                    });
-                } catch (e) {}
-                modalCommandsList = [];
-                currentCommands = [];
-                pendingAuthCommands = null;
-                return;
-            }
-
-            const selectedCommands = selectedIndices.map(idx => commandsToExecute[idx]).filter(cmd => cmd);
-
-            if (selectedCommands.length === 0) {
-                addMessage('Error: No valid commands selected.', 'system');
-                cmdModal.classList.remove('show');
-                try {
-                    const formData = new FormData();
-                    formData.append('authorized', 'false');
-                    formData.append('commands', JSON.stringify([]));
-                    await fetch('/api/authorize-execute', {
-                        method: 'POST',
-                        body: formData
-                    });
-                } catch (e) {}
-                modalCommandsList = [];
-                currentCommands = [];
-                pendingAuthCommands = null;
-                return;
-            }
-
+        async function submitAuth(authorized) {
             cmdModal.classList.remove('show');
-
+            const cmd = pendingCommand;
             try {
                 const formData = new FormData();
-                formData.append('authorized', 'true');
-                formData.append('commands', JSON.stringify(selectedCommands));
-                const res = await fetch('/api/authorize-execute', {
+                formData.append('authorized', authorized ? 'true' : 'false');
+                formData.append('commands', JSON.stringify(authorized && cmd ? [cmd] : []));
+                await fetch('/api/authorize-execute', {
                     method: 'POST',
                     body: formData
                 });
-                if (!res.ok) {
-                    addMessage(`Error: Authorization failed with status ${res.status}`, 'system');
-                }
             } catch (err) {
                 addMessage('Error: ' + err.message, 'system');
             } finally {
-                modalCommandsList = [];
-                currentCommands = [];
-                pendingAuthCommands = null;
+                pendingCommand = null;
             }
         }
 
@@ -1043,40 +909,18 @@
             if (e.key === 'Enter') sendMessage();
         });
 
-        document.getElementById('modalCancel').addEventListener('click', async () => {
-            cmdModal.classList.remove('show');
-            addMessage('Command execution cancelled by user.', 'system');
-            try {
-                const formData = new FormData();
-                formData.append('authorized', 'false');
-                formData.append('commands', JSON.stringify([]));
-                await fetch('/api/authorize-execute', {
-                    method: 'POST',
-                    body: formData
-                });
-            } catch (e) {}
-            modalCommandsList = [];
-            currentCommands = [];
+        document.getElementById('modalDeny').addEventListener('click', async () => {
+            addMessage('Command execution denied by user.', 'system');
+            await submitAuth(false);
         });
 
-        document.getElementById('modalSelectAll').addEventListener('click', () => {
-            const checkboxes = modalCommands.querySelectorAll('input[type="checkbox"]');
-            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-            checkboxes.forEach(cb => cb.checked = !allChecked);
-        });
-
-        document.getElementById('modalAuthorizeSelected').addEventListener('click', () => {
-            const selectedIndices = [];
-            const checkboxes = modalCommands.querySelectorAll('input[type="checkbox"]');
-            checkboxes.forEach((cb, i) => {
-                if (cb.checked) selectedIndices.push(i);
-            });
-            executeSelectedCommands(selectedIndices);
+        document.getElementById('modalAuthorize').addEventListener('click', async () => {
+            await submitAuth(true);
         });
 
         authToggle.addEventListener('click', async () => {
             const currentMode = document.getElementById('authMode').textContent;
-            const newMode = currentMode.includes('Always') ? 'session' : 'always';
+            const newMode = currentMode.includes('Required') ? '1' : '0';
             
             const formData = new FormData();
             formData.append('mode', newMode);
@@ -1474,21 +1318,6 @@
                 filesPathModalConfirm.click();
             }
         });
-
-        function formatCommandResult(ex) {
-            const action = ex.action;
-            const params = ex.params || {};
-            if (action === 'exec_cmd') {
-                const cmdStr = params.command || '';
-                return `[${action}] [${cmdStr}]\n${ex.result}`;
-            } else if (action === 'write_file') {
-                const path = params.path || '';
-                return `[${action}] [${path}]\n${ex.result}`;
-            } else {
-                const path = params.path || '';
-                return `[${action}] [${path}]\n${ex.result}`;
-            }
-        }
 
         async function executeDirectCommand(cmd) {
             try {

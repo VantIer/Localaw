@@ -1,0 +1,250 @@
+<project>
+    <description>
+        这是一个基于python语言的单会话大模型本地Agent项目，用于调用大模型并在本地执行指令，以完成用户指定的任务。
+    </description>
+    <implementation>
+        <interface>
+            <cli-mode>
+                <description>支持以命令行模式运行，接受用户输入，调用大模型，本地执行指令，并返回结果。</description>
+                <command>
+                    /quit：退出命令行模式。
+                </command>
+                <command>
+                    /help：显示帮助信息，列出所有可用命令及其说明。
+                </command>
+                <command>
+                    /y：允许当前待执行指令执行。
+                </command>
+                <command>
+                    /n：不允许当前待执行指令执行。
+                </command>
+                <command>
+                    /y-all：自动允许后续所有指令执行（将授权模式设为1）。
+                </command>
+                <command>
+                    /n-all：后续指令执行需要申请授权（将授权模式设为0）。
+                </command>
+                <command>
+                    /reset：重置会话，清除会话历史。
+                </command>
+                <flow>
+                    1. 用户输入消息，调用Model模块处理。
+                    2. Model模块调用LLM并返回结果，若结果中包含命令调用，进入授权流程。
+                    3. 若需要授权（auth_mode=0），Model模块在终端展示待执行命令，等待用户输入 /y、/n、/y-all、/n-all。
+                    4. 用户授权后，执行命令，结果反馈给LLM继续多轮对话。
+                    5. 用户拒绝则将拒绝信息反馈给LLM，继续对话。
+                    6. 当LLM返回中不含任何命令调用时，对话停止，等待用户输入。
+                </flow>
+            </cli-mode>
+            <web-mode>
+                <description>支持以web模式运行，接受用户输入，调用大模型，本地执行指令，并返回结果。提供一个web界面，用户可以通过web界面输入指令，查看结果。</description>
+                <function>
+                    支持用户输入指令执行并返回结果
+                </function>
+                <function>
+                    支持文件管理功能
+                </function>
+                <function>
+                    支持指令授权模式修改，支持显示主题修改，支持会话重置
+                </function>
+                <flow>
+                    1. 用户在Web界面输入消息，前端通过SSE流式连接调用Model模块。
+                    2. Model模块以SSE事件流逐步推送：LLM回答片段(chunk) → 命令解析结果 → 授权请求(若需要)。
+                    3. 若需要授权，前端弹出授权弹窗，用户选择允许/拒绝/部分允许。
+                    4. 用户授权后，Model模块执行命令，推送执行结果事件。
+                    5. 用户拒绝则推送拒绝事件，Model模块将拒绝信息反馈给LLM。
+                    6. 当LLM返回中不含任何命令调用时，推送done事件，对话停止。
+                </flow>
+                <event>
+                    answering：开始新一轮LLM调用。附加字段：iteration
+                </event>
+                <event>
+                    chunk：LLM回答片段。附加字段：content
+                </event>
+                <event>
+                    response_done：一轮LLM回答完成。附加字段：iteration, commands
+                </event>
+                <event>
+                    auth_required：需要用户授权。附加字段：commands
+                </event>
+                <event>
+                    waiting_auth：等待用户授权响应。附加字段：iteration
+                </event>
+                <event>
+                    executing：正在执行命令。附加字段：commands
+                </event>
+                <event>
+                    execution_done：命令执行完成。附加字段：results
+                </event>
+                <event>
+                    auth_denied：用户拒绝授权。附加字段：message
+                </event>
+                <event>
+                    error：发生错误。附加字段：error
+                </event>
+                <event>
+                    done：整个对话轮次结束。附加字段：iteration
+                </event>
+            </web-mode>
+        </interface>
+        <backend>
+            <controler>
+                <description>控制模块，配置信息加载维护，并控制整个Agent的运行。</description>
+                <point>启动时从config.json加载配置项，获取当前操作系统名称，注入到system_prompt的{system_name}占位符中</point>
+                <point>指令授权模式采用一个整型变量auth_mode进行保存，0为需要授权，1为自动授权，由控制模块维护，读取/修改需要加锁(threading.Lock)</point>
+                <point>授权模式修改为临时性修改，不视作配置修改，不进行持久化</point>
+                <point>auth_mode初始值从配置文件的auth_mode字段读取，若未配置则默认为0（需要授权）</point>
+                <point>会话重置(/reset)时，授权模式恢复为初始值</point>
+                <point>配置文件在CLI模式与Web模式下均不提供修改功能，也不支持持久化保存</point>
+                <point>控制模块开放一个授权查询接口get_auth_mode() -> int，供命令模块调用，以查询当前授权模式，读取时加锁</point>
+                <point>控制模块开放一个授权修改接口set_auth_mode(mode: int)，当Web模式修改认证模式，及命令行模式执行/y-all或/n-all修改认证模式时，由控制模块接受请求并修改认证模式，写入时加锁</point>
+                <point>控制模块开放一个获取配置接口get_config() -> Config，返回当前配置对象的只读引用</point>
+                <point>控制模块开放一个重置授权接口reset_auth()，将授权模式恢复为配置文件中的初始值，加锁操作</point>
+            </controler>
+            <model>
+                <description>模型模块，负责命令行模式/web模式交互，负责调用大模型，并返回结果。</description>
+                <point>模型模块调用大模型，并返回结果</point>
+                <point>允许大模型以json格式申请调用工具与指令</point>
+                <point>当大模型申请调用工具与指令时，自动调用命令模块执行该工具/指令</point>
+                <point>当大模型尝试同时执行多个指令时，模型模块采用线性串行模式，逐个传入并调用命令模块，由命令模块逐个进行解析、获取授权及执行，每条指令的授权与执行结果独立处理</point>
+                <point>工具/指令执行完毕后，将结果返回给大模型，并自动进行下一轮对话</point>
+                <point>当大模型的返回中不含任何工具/指令调用时，对话停止并等待用户输入</point>
+                <point>受工具/指令调用所触发的多轮调用，轮数受配置文件中的round_limit值限制。到达限制值时自动停止对话</point>
+                <point>模型模块开放一个授权请求接口request_auth(commands: list) -> AuthResult，供命令模块调用，以向用户申请授权</point>
+                <point>CLI模式下授权请求在终端展示待执行命令列表，等待用户输入/y、/n、/y-all、/n-all</point>
+                <point>Web模式下授权请求通过SSE推送auth_required事件，等待前端通过/api/authorize-execute接口返回授权结果</point>
+                <cli-vs-web>
+                    CLI模式：同步阻塞调用，直接返回完整结果ChatResult。可使用流式或非流式LLM调用，直接打印到终端。授权交互通过终端输入/y、/n、/y-all、/n-all。结果展示直接终端打印。错误在终端打印。
+                </cli-vs-web>
+                <cli-vs-web>
+                    Web模式：SSE流式输出，分步推送事件。必须使用流式LLM调用，逐chunk推送。授权交互通过前端弹窗确认，通过API返回结果。结果展示通过SSE事件推送至前端渲染。错误在对话窗口中显示，样式同指令执行结果。
+                </cli-vs-web>
+                <api>
+                    chat(message: str) -> ChatResult：CLI模式同步阻塞调用，返回完整结果（含LLM响应、命令列表、执行结果、错误信息）
+                </api>
+                <api>
+                    chat_stream(message: str) -> Iterator[SSEEvent]：Web模式流式调用，返回SSE事件迭代器，逐步推送
+                </api>
+                <api>
+                    request_auth(commands: list) -> AuthResult：供Command模块调用，向用户申请授权。CLI模式阻塞等待终端输入，Web模式阻塞等待API回调。AuthResult包含authorized(bool)和commands(list)
+                </api>
+                <api>
+                    reset_conversation()：清除会话历史，通知Controller重置授权状态
+                </api>
+                <api>
+                    get_history() -> list[dict]：返回当前会话历史记录
+                </api>
+                <error>
+                    LLM API调用失败时，向用户返回错误信息，但不退出程序。等待用户输入：用户可输入新消息重新调用LLM API继续会话。CLI模式在终端打印错误信息，Web模式通过SSE推送error事件在对话窗口中显示。
+                </error>
+            </model>
+            <command>
+                <description>命令模块，负责解析指令，并返回结果。</description>
+                <point>收到指令后，进行解析</point>
+                <point>调用控制模块的授权查询接口get_auth_mode()，以查询当前授权模式</point>
+                <point>根据授权模式，判断是否需要授权：auth_mode=0需要授权，auth_mode=1自动授权</point>
+                <point>如果需要授权，则调用模型模块的授权请求接口request_auth()，以向用户申请授权</point>
+                <point>如果用户授权，则执行指令，将结果返回给模型模块，并继续对话</point>
+                <point>如果用户拒绝，则将用户拒绝的信息返回给模型模块，由模型模块反馈给LLM继续对话</point>
+                <point>命令执行前进行安全检查，黑名单仅保留"rm -rf /"，匹配到黑名单模式的命令将被阻止执行，匹配规则为命令字符串中包含黑名单模式（不区分大小写）</point>
+                <point>命令执行超时机制：超时时长通过配置文件的cmd_timeout字段设置，默认60秒</point>
+                <point>文件类命令（list_dir、make_dir、delete_dir、rename_dir、read_file、write_file、delete_file、edit_file、rename_file）通过File模块执行，Command模块负责解析、授权检查、安全检查后，将执行委托给File模块</point>
+                <point>非文件类命令（exec_cmd）由Command模块直接执行</point>
+                <point>命令执行失败的错误返回格式同现有设计中指令执行信息返回的格式，但将信息部分替换为错误信息，格式为：[action] [参数摘要] Error: 错误信息</point>
+                <point>命令执行失败不影响后续命令的执行（同一轮次中的其他命令继续执行）</point>
+                <point>所有命令执行结果（包括失败的）统一反馈给LLM进行后续处理</point>
+                <action>
+                    list_dir：列出目录内容。参数：path(可选，默认当前目录)。执行方式：委托File模块。
+                </action>
+                <action>
+                    make_dir：创建目录。参数：path(必填)。执行方式：委托File模块。
+                </action>
+                <action>
+                    delete_dir：删除目录。参数：path(必填)。执行方式：委托File模块。
+                </action>
+                <action>
+                    rename_dir：重命名目录。参数：path(必填), new_name(必填)。执行方式：委托File模块。
+                </action>
+                <action>
+                    read_file：读取文件内容。参数：path(必填), start_line(可选), end_line(可选)。执行方式：委托File模块。
+                </action>
+                <action>
+                    write_file：写入文件。参数：path(必填), content(必填)。执行方式：委托File模块。
+                </action>
+                <action>
+                    delete_file：删除文件。参数：path(必填)。执行方式：委托File模块。
+                </action>
+                <action>
+                    edit_file：编辑文件内容。参数：path(必填), operation(必填: add/del/modify), start_line(必填), end_line(必填: del/modify), content(必填: add/modify)。执行方式：委托File模块。
+                </action>
+                <action>
+                    rename_file：重命名文件。参数：path(必填), new_name(必填)。执行方式：委托File模块。
+                </action>
+                <action>
+                    exec_cmd：执行Shell命令。参数：command(必填)。执行方式：Command模块直接执行。
+                </action>
+                <api>
+                    parse_and_execute(commands: list) -> list[ExecutionResult]：解析命令列表，进行授权检查和安全检查，执行并返回结果列表。ExecutionResult包含action(str)、params(dict)、result(str)
+                </api>
+                <api>
+                    execute(action: str, params: dict) -> str：直接执行单条命令，跳过授权检查。用于Web直接命令面板等场景。文件类命令同样委托File模块执行。
+                </api>
+            </command>
+            <file>
+                <description>文件模块，负责文件管理功能，为Command模块的文件类命令和Web模式的文件管理API提供统一执行层。</description>
+                <point>不设置路径访问限制</point>
+                <operation>list_dir(path: str = ".") -> str：列出指定目录下的文件和子目录</operation>
+                <operation>create_file(path: str) -> str：创建空文件</operation>
+                <operation>create_dir(path: str) -> str：创建目录（含父目录）</operation>
+                <operation>delete(path: str) -> str：删除文件或目录</operation>
+                <operation>rename(path: str, new_name: str) -> str：重命名文件或目录</operation>
+                <operation>read_file(path: str, start_line: int = 0, end_line: int = 0) -> str：读取文件内容，支持按行范围读取</operation>
+                <operation>write_file(path: str, content: str) -> str：写入文件内容</operation>
+                <operation>edit_file(path: str, operation: str, start_line: int, end_line: int, content: str = "") -> str：编辑文件，支持add/del/modify行操作</operation>
+                <operation>copy(src: str, dest: str) -> str：复制文件或目录</operation>
+                <operation>move(src: str, dest: str) -> str：移动文件或目录</operation>
+                <operation>upload(filename: str, content: bytes) -> str：上传文件到当前目录</operation>
+                <operation>download(path: str) -> FileResponse：下载指定文件</operation>
+            </file>
+        </backend>
+        <inter-module>
+            <description>模块间接口调用关系</description>
+            <point>CLI/Web界面层调用Model模块的chat()或chat_stream()接口</point>
+            <point>Model模块调用Command模块的parse_and_execute()接口</point>
+            <point>Command模块调用Controller模块的get_auth_mode()接口查询授权状态</point>
+            <point>Command模块调用Model模块的request_auth()接口向用户申请授权</point>
+            <point>Command模块的文件类命令委托File模块执行</point>
+            <point>Model模块调用Controller模块的set_auth_mode()接口修改授权模式</point>
+            <point>Model模块调用Controller模块的reset_auth()接口重置授权状态</point>
+        </inter-module>
+        <config>
+            <description>配置文件为项目根目录下的config.json，参照现有结构并增加新字段</description>
+            <field>api_base：string，默认"http://localhost:11434/v1"，LLM API基础地址</field>
+            <field>api_key：string，默认"ollama"，LLM API密钥</field>
+            <field>model：string，默认"llama3.2"，模型名称</field>
+            <field>round_limit：int，默认20，多轮对话最大轮次</field>
+            <field>cmd_timeout：int，默认60，命令执行超时时间（秒），新增字段</field>
+            <field>auth_mode：int，默认0，初始授权模式：0=需要授权，1=自动授权，新增字段</field>
+            <field>system_prompt：string，内置默认值，系统提示词，支持{system_name}占位符</field>
+            <field>listen_host：string，默认"127.0.0.1"，Web模式监听地址</field>
+            <field>listen_port：int，默认8880，Web模式监听端口</field>
+        </config>
+        <error-strategy>
+            <description>错误处理策略</description>
+            <point>LLM API调用失败：向用户返回错误信息，但不退出程序。等待用户输入，用户可输入新消息重新调用LLM API继续会话。CLI模式在终端打印错误信息，Web模式通过SSE推送error事件在对话窗口中显示，样式同指令执行结果的显示</point>
+            <point>命令执行失败：错误返回格式同现有设计中指令执行信息返回的格式，但将信息部分替换为错误信息，格式为[action] [参数摘要] Error: 错误信息。命令执行失败不影响后续命令的执行</point>
+            <point>命令执行超时：超时时长由配置文件cmd_timeout字段控制，超时后返回Error: Command timed out after {cmd_timeout} seconds</point>
+            <point>安全检查拦截：被黑名单拦截的命令返回Error: Command blocked due to safety concerns</point>
+            <point>所有命令执行结果（包括失败的）统一反馈给LLM进行后续处理</point>
+        </error-strategy>
+        <safety>
+            <description>安全机制</description>
+            <point>仅对exec_cmd命令进行安全检查，文件类命令不进行安全检查</point>
+            <point>黑名单模式列表仅保留：rm -rf /</point>
+            <point>匹配规则：命令字符串中包含黑名单模式即为拦截（不区分大小写）</point>
+            <point>当auth_mode=0时，所有命令执行前需经用户授权</point>
+            <point>用户可通过/y-all(CLI)或Web界面切换为auth_mode=1（自动授权）</point>
+            <point>用户可通过/n-all(CLI)或Web界面切换为auth_mode=0（需要授权）</point>
+        </safety>
+    </implementation>
+</project>
