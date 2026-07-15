@@ -71,9 +71,19 @@ class ModelModule:
                     self._conversation_history.append({"role": "assistant", "content": full_response})
                     last_response = full_response
 
-                parsed_commands = CommandParser.parse(full_response) or []
+                parsed_commands, parse_errors = CommandParser.parse(full_response)
+
+                if parse_errors:
+                    error_text = "\n".join(parse_errors)
+                    print(f"\n[Parse Error] {error_text}")
+                    self._conversation_history.append(
+                        {"role": "user", "content": f"JSON parse error occurred. Please fix the JSON format and resend:\n{error_text}"}
+                    )
+
                 if not parsed_commands:
-                    return ChatResult(response=last_response)
+                    if not parse_errors:
+                        return ChatResult(response=last_response)
+                    continue
 
                 # Process commands serially via Command module
                 results = self._command.parse_and_execute(parsed_commands)
@@ -122,14 +132,24 @@ class ModelModule:
 
                 self._conversation_history.append({"role": "assistant", "content": full_response})
 
-                parsed_commands = CommandParser.parse(full_response) or []
+                parsed_commands, parse_errors = CommandParser.parse(full_response)
+
+                if parse_errors:
+                    error_text = "\n".join(parse_errors)
+                    yield {"type": "parse_error", "errors": parse_errors}
+                    self._conversation_history.append(
+                        {"role": "user", "content": f"JSON parse error occurred. Please fix the JSON format and resend:\n{error_text}"}
+                    )
+
                 if parsed_commands:
                     commands = parsed_commands
 
                 yield {"type": "response_done", "iteration": iteration, "commands": commands}
 
                 if not commands:
-                    break
+                    if not parse_errors:
+                        break
+                    continue
 
                 # Process commands serially
                 all_results = []
