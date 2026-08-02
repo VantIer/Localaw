@@ -31,13 +31,10 @@ echo "Building..."
 pyinstaller --onefile --name Localaw \
     --add-data "web:web" \
     --add-data "src:src" \
-    --hidden-import numpy \
     --hidden-import uvicorn \
     --hidden-import fastapi \
     --hidden-import openai \
     --hidden-import httpx \
-    --hidden-import tzdata \
-    --collect-all numpy \
     --collect-all uvicorn \
     --collect-all fastapi \
     --collect-all openai \

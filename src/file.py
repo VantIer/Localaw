@@ -1,3 +1,4 @@
+import json
 import shutil
 from pathlib import Path
 
@@ -73,10 +74,13 @@ class FileModule:
                 return f"{path} is a directory"
             with open(target, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-            if start_line == 0 or start_line == "" or start_line is None:
+            if not start_line:
                 return "".join(lines)[:50000]
             start = max(0, start_line - 1)
-            end = min(len(lines), end_line)
+            if not end_line:
+                end = len(lines)
+            else:
+                end = min(len(lines), end_line)
             if start >= len(lines):
                 return f"Start line {start_line} exceeds file line count ({len(lines)})"
             return "".join(lines[start:end])
@@ -87,8 +91,14 @@ class FileModule:
         try:
             target = Path(path).resolve()
             target.parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(content, str):
+                text = content
+            elif isinstance(content, (dict, list)):
+                text = json.dumps(content, ensure_ascii=False, indent=2)
+            else:
+                text = str(content)
             with open(target, "w", encoding="utf-8") as f:
-                f.write(content)
+                f.write(text)
             return f"Successfully wrote to: {path}"
         except Exception as e:
             return f"Error writing file: {str(e)}"

@@ -35,6 +35,15 @@ class CommandModule:
     def set_model(self, model):
         self._model = model
 
+    @staticmethod
+    def _to_int(value, default=0):
+        try:
+            if value is None or value == "":
+                return default
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     def check_safety(self, cmd: str) -> bool:
         cmd_lower = cmd.lower()
         for pattern in self.FORBIDDEN_PATTERNS:
@@ -89,8 +98,8 @@ class CommandModule:
             ),
             "read_file": lambda: self._file_module.read_file(
                 params.get("path", ""),
-                params.get("start_line", 0),
-                params.get("end_line", 0),
+                self._to_int(params.get("start_line"), 0),
+                self._to_int(params.get("end_line"), 0),
             ),
             "write_file": lambda: self._file_module.write_file(
                 params.get("path", ""), params.get("content", "")
@@ -99,8 +108,8 @@ class CommandModule:
             "edit_file": lambda: self._file_module.edit_file(
                 params.get("path", ""),
                 params.get("operation", ""),
-                params.get("start_line", 0),
-                params.get("end_line", 0),
+                self._to_int(params.get("start_line"), 0),
+                self._to_int(params.get("end_line"), 0),
                 params.get("content", ""),
             ),
             "rename_file": lambda: self._file_module.rename(

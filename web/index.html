@@ -6,45 +6,67 @@
     <title>Localaw - Local AI Assistant</title>
     <style>
         :root {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f0f0f0;
-            --bg-tertiary: #e8e8e8;
-            --bg-chat: #ffffff;
-            --border-color: #d0d0d0;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --text-accent: #444;
-            --btn-primary: #4F46E5;
-            --btn-secondary: #d0d0d0;
-            --btn-danger: #dc3545;
-            --status-unauth: #dc3545;
-            --status-auth: #28a745;
-            --cmd-bg: #e8e8e8;
-            --modal-bg: #ffffff;
-            --msg-user-bg: #dde4ff;
-            --msg-ai-bg: #f0f0f0;
-            --file-selected-bg: #dde4ff;
+            --bg-app: #f4f5fa;
+            --bg-surface: #ffffff;
+            --bg-subtle: #f1f3f9;
+            --bg-inset: #e9ebf3;
+            --border: #e4e7f0;
+            --border-strong: #d4d9e6;
+            --text: #1b1f2b;
+            --text-muted: #6b7280;
+            --text-faint: #98a0b3;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --primary-soft: rgba(79, 70, 229, 0.1);
+            --gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+            --danger: #ef4444;
+            --danger-soft: rgba(239, 68, 68, 0.1);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --msg-user-bg: linear-gradient(135deg, #6366f1, #4f46e5);
+            --msg-user-text: #ffffff;
+            --msg-ai-bg: var(--bg-surface);
+            --msg-system-bg: var(--bg-subtle);
+            --cmd-bg: #f1f3f9;
+            --file-selected-bg: rgba(79, 70, 229, 0.1);
+            --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+            --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+            --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.14);
+            --overlay: rgba(15, 17, 23, 0.45);
+            --scrollbar: rgba(100, 110, 140, 0.35);
+            --scrollbar-hover: rgba(100, 110, 140, 0.6);
         }
 
         [data-theme="dark"] {
-            --bg-primary: #121212;
-            --bg-secondary: #252525;
-            --bg-tertiary: #323232;
-            --bg-chat: #1e1e1e;
-            --border-color: #4a4a4a;
-            --text-primary: #e8e8e8;
-            --text-secondary: #a0a0a0;
-            --text-accent: #b0b0b0;
-            --btn-primary: #4F46E5;
-            --btn-secondary: #4a4a4a;
-            --btn-danger: #dc3545;
-            --status-unauth: #dc3545;
-            --status-auth: #28a745;
-            --cmd-bg: #2a2a2a;
-            --modal-bg: #1e1e1e;
-            --msg-user-bg: #2a3a5c;
-            --msg-ai-bg: #2a2a2a;
-            --file-selected-bg: #2a3a5c;
+            --bg-app: #0e1016;
+            --bg-surface: #171a23;
+            --bg-subtle: #1f2430;
+            --bg-inset: #262c3a;
+            --border: #262c3a;
+            --border-strong: #333b4d;
+            --text: #e6e8f0;
+            --text-muted: #9aa3b4;
+            --text-faint: #6f7889;
+            --primary: #6366f1;
+            --primary-hover: #818cf8;
+            --primary-soft: rgba(99, 102, 241, 0.16);
+            --gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+            --danger: #ef4444;
+            --danger-soft: rgba(239, 68, 68, 0.14);
+            --success: #34d399;
+            --warning: #fbbf24;
+            --msg-user-bg: linear-gradient(135deg, #6366f1, #4f46e5);
+            --msg-user-text: #ffffff;
+            --msg-ai-bg: var(--bg-surface);
+            --msg-system-bg: var(--bg-subtle);
+            --cmd-bg: #20242f;
+            --file-selected-bg: rgba(99, 102, 241, 0.18);
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+            --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+            --shadow-lg: 0 18px 46px rgba(0, 0, 0, 0.6);
+            --overlay: rgba(0, 0, 0, 0.6);
+            --scrollbar: rgba(160, 170, 200, 0.28);
+            --scrollbar-hover: rgba(160, 170, 200, 0.5);
         }
 
         * {
@@ -52,88 +74,327 @@
             margin: 0;
             padding: 0;
         }
+        html, body {
+            height: 100%;
+        }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-app);
+            background-image: radial-gradient(circle at 15% -10%, rgba(99, 102, 241, 0.08), transparent 40%), radial-gradient(circle at 90% 110%, rgba(139, 92, 246, 0.07), transparent 40%);
+            color: var(--text);
             height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
+        ::selection {
+            background: var(--primary-soft);
+            color: var(--text);
+        }
+        ::-webkit-scrollbar {
+            width: 9px;
+            height: 9px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar);
+            border-radius: 8px;
+            border: 2px solid transparent;
+            background-clip: padding-box;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--scrollbar-hover);
+            border: 2px solid transparent;
+            background-clip: padding-box;
+        }
+        button {
+            font-family: inherit;
+        }
+        button:focus-visible, input:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+
         .header {
-            background: var(--bg-secondary);
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-surface);
+            padding: 0 24px;
+            height: 60px;
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
+            z-index: 50;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+        .logo {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: var(--gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
+            flex-shrink: 0;
+        }
+        .logo svg {
+            width: 18px;
+            height: 18px;
+            color: #fff;
         }
         .header h1 {
-            font-size: 1.2rem;
-            color: var(--text-accent);
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text);
         }
         .header-info {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .header-info .sep {
+            color: var(--text-faint);
         }
         .header-buttons {
             display: flex;
             gap: 8px;
+            flex-shrink: 0;
         }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 9px 16px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+            line-height: 1;
+            white-space: nowrap;
+            transition: all 0.18s ease;
+            user-select: none;
+        }
+        .btn svg {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: var(--gradient);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+        }
+        .btn-primary:hover:not(:disabled) {
+            filter: brightness(1.08);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
+        }
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        .btn-secondary {
+            background: var(--bg-surface);
+            color: var(--text);
+            border-color: var(--border-strong);
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--bg-subtle);
+            border-color: var(--text-faint);
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border-color: var(--border);
+        }
+        .btn-ghost:hover:not(:disabled) {
+            background: var(--bg-subtle);
+            color: var(--text);
+        }
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+        }
+        .btn-danger:hover:not(:disabled) {
+            filter: brightness(1.08);
+            transform: translateY(-1px);
+        }
+        .btn-block {
+            width: 100%;
+        }
+        .btn-sm {
+            padding: 7px 12px;
+            font-size: 0.8rem;
+            border-radius: 8px;
+        }
+
         .main-container {
             flex: 1;
             display: flex;
             overflow: hidden;
+            position: relative;
         }
         .chat-container {
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            padding: 0 0 20px;
             overflow: hidden;
+            position: relative;
+            min-width: 0;
         }
-        .chat-box {
+        .chat-scroll {
             flex: 1;
             overflow-y: auto;
-            padding: 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg-chat);
-            margin-bottom: 15px;
+            padding: 28px 0 12px;
+        }
+        .chat-inner {
+            padding: 0 28px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .welcome {
+            text-align: center;
+            padding: 48px 20px 32px;
+            color: var(--text-muted);
+        }
+        .welcome .welcome-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 20px;
+            border-radius: 20px;
+            background: var(--gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 12px 30px rgba(79, 70, 229, 0.35);
+        }
+        .welcome .welcome-icon svg {
+            width: 30px;
+            height: 30px;
+            color: #fff;
+        }
+        .welcome h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+        }
+        .welcome p {
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .msg-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .msg-row.user {
+            justify-content: flex-end;
+        }
+        .msg-row.user .avatar {
+            order: 2;
+        }
+        .msg-row.system {
+            justify-content: center;
+        }
+        .msg-row.system .avatar {
+            display: none;
+        }
+        .avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.66rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            color: #fff;
+            flex-shrink: 0;
+            margin-top: 2px;
+            box-shadow: var(--shadow-sm);
+        }
+        .msg-row.user .avatar {
+            background: var(--gradient);
+        }
+        .msg-row.ai .avatar {
+            background: linear-gradient(135deg, #0ea5e9, #6366f1);
         }
         .message {
-            margin-bottom: 15px;
-            padding: 12px 15px;
-            border-radius: 10px;
             max-width: 85%;
-            line-height: 1.5;
+            padding: 12px 16px;
+            border-radius: 16px;
+            line-height: 1.6;
             white-space: pre-wrap;
-            word-break: break-all;
+            word-break: break-word;
+            font-size: 0.92rem;
         }
         .message span, .message div {
             tab-size: 4;
         }
         .message.user {
             background: var(--msg-user-bg);
-            margin-left: auto;
+            color: var(--msg-user-text);
+            border-bottom-right-radius: 6px;
+            box-shadow: 0 3px 12px rgba(79, 70, 229, 0.28);
         }
         .message.ai {
             background: var(--msg-ai-bg);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 6px;
+            box-shadow: var(--shadow-sm);
         }
         .message.system {
-            background: var(--cmd-bg);
-            font-size: 0.9rem;
-            color: var(--text-secondary);
+            background: var(--msg-system-bg);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            padding: 8px 16px;
+            border-radius: 10px;
+            max-width: 95%;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
         }
         .message .cmd-block {
-            background: var(--bg-primary);
-            padding: 10px;
-            border-radius: 5px;
+            background: var(--bg-inset);
+            padding: 12px 14px;
+            border-radius: 10px;
             margin-top: 10px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.85rem;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.8rem;
             white-space: pre-wrap;
             overflow-x: auto;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        .message.user .cmd-block {
+            background: rgba(255, 255, 255, 0.16);
+            border-color: rgba(255, 255, 255, 0.25);
         }
         .collapsible-content {
             max-height: 200px;
@@ -151,195 +412,48 @@
             left: 0;
             right: 0;
             height: 40px;
-            background: linear-gradient(transparent, var(--bg-tertiary));
+            background: linear-gradient(transparent, var(--bg-subtle));
             pointer-events: none;
+            border-radius: 0 0 10px 10px;
         }
         .collapsible-content.expanded::after {
             display: none;
         }
         .collapsible-toggle {
             display: none;
-            padding: 8px 12px;
-            margin-top: 5px;
-            background: var(--btn-secondary);
-            border: none;
-            border-radius: 5px;
+            padding: 6px 12px;
+            margin-top: 6px;
+            background: transparent;
+            border: 1px solid var(--border-strong);
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 0.85rem;
-            color: var(--text-primary);
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: all 0.18s ease;
         }
         .collapsible-toggle.show {
             display: inline-block;
         }
-        .input-area {
-            display: flex;
-            gap: 10px;
+        .collapsible-toggle:hover {
+            background: var(--bg-subtle);
+            color: var(--text);
         }
-        #messageInput {
-            flex: 1;
-            padding: 12px 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            font-size: 1rem;
-        }
-        #messageInput:focus {
-            outline: none;
-            border-color: var(--btn-secondary);
-        }
-        .btn {
-            padding: 12px 25px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: all 0.2s;
-        }
-        .btn-primary {
-            background: var(--btn-primary);
-            color: #fff;
-        }
-        .btn-primary:hover {
-            opacity: 0.9;
-        }
-        .btn-secondary {
-            background: var(--btn-secondary);
-            color: var(--text-primary);
-        }
-        .btn-secondary:hover {
-            opacity: 0.9;
-        }
-        .btn-danger {
-            background: var(--btn-danger);
-            color: #fff;
-        }
-        .btn-danger:hover {
-            opacity: 0.9;
-        }
-        .sidebar {
-            width: 280px;
-            background: var(--bg-secondary);
-            border-left: 1px solid var(--border-color);
-            padding: 20px;
-            overflow-y: auto;
-            position: fixed;
-            right: 0;
-            top: 60px;
-            bottom: 0;
-            transform: translateX(100%);
-            transition: transform 0.3s ease;
-            z-index: 100;
-            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
-        }
-        .sidebar.visible {
-            transform: translateX(0);
-        }
-        .sidebar h3 {
-            font-size: 1rem;
-            color: var(--text-accent);
-            margin-bottom: 15px;
-        }
-        .theme-toggle {
-            margin-bottom: 20px;
-        }
-        .auth-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border-color);
-        }
-        .auth-status {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--status-unauth);
-        }
-        .status-dot.authorized {
-            background: var(--status-auth);
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
+
+        .composer-wrap {
             width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        .modal.show {
-            display: flex;
-        }
-        .modal-content {
-            background: var(--modal-bg);
-            padding: 25px;
-            border-radius: 12px;
-            max-width: 600px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            border: 1px solid var(--border-color);
-        }
-        .modal-content h3 {
-            color: var(--text-accent);
-            margin-bottom: 15px;
-        }
-        .modal-commands {
-            background: var(--cmd-bg);
-            padding: 15px;
-            border-radius: 8px;
-            font-family: monospace;
-            margin: 15px 0;
-            white-space: pre-wrap;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        .modal-cmd-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            padding: 8px;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .modal-cmd-item:last-child {
-            border-bottom: none;
-        }
-        .modal-cmd-item .cmd-info {
-            flex: 1;
-        }
-        .modal-cmd-item .cmd-action {
-            font-weight: bold;
-            color: var(--text-accent);
-        }
-        .modal-cmd-item .cmd-params {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-top: 4px;
-        }
-        .modal-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 20px;
+            padding: 0 28px;
+            flex-shrink: 0;
         }
         .answering-indicator {
             display: none;
             align-items: center;
-            gap: 8px;
-            padding: 10px 15px;
-            background: var(--bg-tertiary);
-            border-radius: 8px;
-            margin-bottom: 10px;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
+            justify-content: center;
+            gap: 10px;
+            padding: 6px 0 10px;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
         }
         .answering-indicator.show {
             display: flex;
@@ -349,23 +463,135 @@
             gap: 4px;
         }
         .answering-dots span {
-            width: 8px;
-            height: 8px;
-            background: var(--text-secondary);
+            width: 7px;
+            height: 7px;
+            background: var(--primary);
             border-radius: 50%;
             animation: bounce 1.4s infinite ease-in-out both;
         }
         .answering-dots span:nth-child(1) { animation-delay: -0.32s; }
         .answering-dots span:nth-child(2) { animation-delay: -0.16s; }
         @keyframes bounce {
-            0%, 80%, 100% { transform: scale(0); }
-            40% { transform: scale(1); }
+            0%, 80%, 100% { transform: scale(0.4); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
         }
+        .input-area {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-strong);
+            border-radius: 16px;
+            padding: 8px 8px 8px 16px;
+            box-shadow: var(--shadow-md);
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .input-area:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px var(--primary-soft), var(--shadow-md);
+        }
+        #messageInput {
+            flex: 1;
+            padding: 10px 0;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            font-size: 0.95rem;
+            font-family: inherit;
+            resize: none;
+        }
+        #messageInput:focus {
+            outline: none;
+        }
+        #messageInput::placeholder {
+            color: var(--text-faint);
+        }
+        #sendBtn {
+            padding: 11px 18px;
+            border-radius: 12px;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: var(--bg-surface);
+            border-left: 1px solid var(--border);
+            padding: 22px;
+            overflow-y: auto;
+            position: fixed;
+            right: 0;
+            top: 60px;
+            bottom: 0;
+            transform: translateX(102%);
+            transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+            z-index: 100;
+            box-shadow: var(--shadow-lg);
+        }
+        .sidebar.visible {
+            transform: translateX(0);
+        }
+        .sidebar-section {
+            margin-bottom: 24px;
+        }
+        .sidebar-section:not(:first-child) {
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+        .sidebar h3 {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-faint);
+            margin-bottom: 14px;
+        }
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .setting-label {
+            font-size: 0.875rem;
+            color: var(--text);
+            font-weight: 500;
+        }
+        .auth-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+        }
+        .auth-status .auth-label {
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--danger);
+            box-shadow: 0 0 0 4px var(--danger-soft);
+            flex-shrink: 0;
+        }
+        .status-dot.authorized {
+            background: var(--success);
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15);
+        }
+
         .command-panel {
             display: none;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
-            padding: 15px 20px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 24px;
+            flex-shrink: 0;
+            z-index: 40;
+            box-shadow: var(--shadow-sm);
         }
         .command-panel.visible {
             display: block;
@@ -374,19 +600,44 @@
             display: flex;
             gap: 10px;
         }
+        .command-input-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0 12px;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .command-input-wrap:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-soft);
+        }
+        .command-input-wrap svg {
+            width: 15px;
+            height: 15px;
+            color: var(--text-faint);
+            flex-shrink: 0;
+        }
         #commandInput {
             flex: 1;
-            padding: 10px 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            font-size: 1rem;
+            padding: 11px 0;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            font-size: 0.9rem;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
         }
         #commandInput:focus {
             outline: none;
-            border-color: var(--btn-primary);
         }
+        #commandInput::placeholder {
+            color: var(--text-faint);
+            font-family: inherit;
+        }
+
         .files-panel {
             display: none;
             position: fixed;
@@ -394,75 +645,225 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: var(--bg-primary);
-            z-index: 200;
+            background: var(--bg-app);
+            z-index: 90;
             flex-direction: column;
-            padding: 20px;
+            padding: 24px;
+            animation: fadeIn 0.2s ease;
         }
         .files-panel.visible {
             display: flex;
         }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .files-panel-inner {
+            width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
         .files-toolbar {
             display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
+            gap: 8px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .files-toolbar .btn {
+            padding: 8px 14px;
+            font-size: 0.82rem;
+        }
+        .files-toolbar .spacer {
+            flex: 1;
         }
         .files-path-container {
             display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 8px;
+            margin-bottom: 14px;
         }
         .files-path-input {
             flex: 1;
-            font-size: 0.9rem;
-            padding: 8px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            color: var(--text-primary);
+            font-size: 0.85rem;
+            padding: 9px 14px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-strong);
+            border-radius: 10px;
+            color: var(--text);
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
         }
         .files-path-input:focus {
             outline: none;
-            border-color: var(--accent-color);
-        }
-        #filesAccessBtn {
-            padding: 8px 16px;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-soft);
         }
         .files-list {
             flex: 1;
             overflow-y: auto;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg-chat);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: var(--bg-surface);
+            box-shadow: var(--shadow-sm);
+        }
+        .files-list-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-faint);
+            gap: 10px;
+        }
+        .files-list-empty svg {
+            width: 42px;
+            height: 42px;
+            opacity: 0.5;
         }
         .files-item {
             display: flex;
             align-items: center;
-            padding: 10px 15px;
-            border-bottom: 1px solid var(--border-color);
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--border);
             cursor: pointer;
+            transition: background 0.12s ease;
         }
         .files-item:last-child {
             border-bottom: none;
         }
         .files-item:hover {
-            background: var(--bg-secondary);
+            background: var(--bg-subtle);
         }
         .files-item.selected {
             background: var(--file-selected-bg);
         }
+        .files-item.selected .files-item-name {
+            color: var(--primary);
+            font-weight: 600;
+        }
         .files-item-icon {
-            margin-right: 10px;
-            font-size: 1.1rem;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .files-item-icon svg {
+            width: 20px;
+            height: 20px;
         }
         .files-item-name {
             flex: 1;
+            font-size: 0.88rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .files-item-size {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
+            font-size: 0.78rem;
+            color: var(--text-faint);
             margin-left: 10px;
+            flex-shrink: 0;
         }
+        .files-item-type {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-faint);
+            margin-left: 12px;
+            flex-shrink: 0;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--overlay);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        .modal.show {
+            display: flex;
+        }
+        .modal-content {
+            background: var(--bg-surface);
+            padding: 26px;
+            border-radius: 18px;
+            max-width: 560px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg);
+            animation: modalIn 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        @keyframes modalIn {
+            from { opacity: 0; transform: translateY(14px) scale(0.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .modal-content h3 {
+            color: var(--text);
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+        .modal-content .modal-desc {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+        }
+        .modal-commands {
+            background: var(--cmd-bg);
+            padding: 14px;
+            border-radius: 12px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            margin: 16px 0;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+        }
+        .modal-cmd-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        .modal-cmd-item:last-child {
+            border-bottom: none;
+        }
+        .modal-cmd-item .cmd-info {
+            flex: 1;
+        }
+        .modal-cmd-item .cmd-action {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .modal-cmd-item .cmd-params {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            line-height: 1.5;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
         .files-modal {
             display: none;
             position: fixed;
@@ -470,73 +871,149 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: var(--overlay);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
             justify-content: center;
             align-items: center;
             z-index: 300;
+            padding: 20px;
         }
         .files-modal.show {
             display: flex;
         }
         .files-modal-content {
-            background: var(--modal-bg);
-            padding: 25px;
-            border-radius: 12px;
-            min-width: 300px;
+            background: var(--bg-surface);
+            padding: 26px;
+            border-radius: 18px;
+            min-width: 320px;
+            width: 100%;
+            max-width: 420px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg);
+            animation: modalIn 0.22s cubic-bezier(0.32, 0.72, 0, 1);
         }
         .files-modal-content h3 {
-            margin-bottom: 15px;
-            color: var(--text-accent);
+            margin-bottom: 16px;
+            color: var(--text);
+            font-size: 1.05rem;
+            font-weight: 700;
         }
-        .files-modal-content input {
+        .files-modal-content input[type="text"] {
             width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
+            padding: 11px 14px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border-strong);
+            border-radius: 10px;
+            background: var(--bg-subtle);
+            color: var(--text);
+            font-size: 0.9rem;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .files-modal-content input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-soft);
+        }
+        .files-modal-radio-group {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .files-modal-radio-group label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            cursor: pointer;
+            color: var(--text);
+            font-size: 0.88rem;
+            padding: 8px 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--bg-subtle);
+            transition: all 0.15s ease;
+        }
+        .files-modal-radio-group label:has(input:checked) {
+            border-color: var(--primary);
+            background: var(--primary-soft);
+            color: var(--primary);
+            font-weight: 600;
+        }
+        .files-modal-radio-group input[type="radio"] {
+            cursor: pointer;
+            accent-color: var(--primary);
+            margin: 0;
         }
         .files-modal-actions {
             display: flex;
             gap: 10px;
             justify-content: flex-end;
         }
-        .files-modal-radio-group {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 15px;
+
+        .toast {
+            position: fixed;
+            top: 76px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-8px);
+            background: var(--bg-surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 18px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            box-shadow: var(--shadow-lg);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 2000;
         }
-        .files-modal-radio-group label {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            cursor: pointer;
-            color: var(--text-primary);
-            line-height: 1;
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
         }
-        .files-modal-radio-group input[type="radio"] {
-            cursor: pointer;
-            vertical-align: middle;
-            margin: 0;
+        .toast.error {
+            border-color: rgba(239, 68, 68, 0.4);
+            color: var(--danger);
+        }
+
+        @media (max-width: 720px) {
+            .header { padding: 0 16px; }
+            .header-info { display: none; }
+            .chat-inner, .composer-wrap { padding: 0 16px; }
+            .files-panel { padding: 14px; }
+            .message { max-width: 92%; }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Localaw</h1>
-        <div class="header-info">
-            <span id="modelName">Model: --</span> | 
-            <span id="authMode">Auth: Required</span>
+        <div class="header-left">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 9l-4 3 4 3"/>
+                    <path d="M16 9l4 3-4 3"/>
+                    <path d="M13 5l-2 14"/>
+                </svg>
+            </div>
+            <h1>Localaw</h1>
+            <div class="header-info">
+                <span id="modelName">Model: --</span>
+                <span class="sep">|</span>
+                <span id="authMode">Auth: Required</span>
+            </div>
         </div>
         <div class="header-buttons">
-            <button class="btn btn-secondary" id="commandToggleBtn" style="padding: 8px 12px; font-size: 0.85rem;">
+            <button class="btn btn-secondary btn-sm" id="commandToggleBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h6"/><path d="M7 12h4"/><path d="M7 16h8"/></svg>
                 Command
             </button>
-            <button class="btn btn-secondary" id="filesToggleBtn" style="padding: 8px 12px; font-size: 0.85rem;">
+            <button class="btn btn-secondary btn-sm" id="filesToggleBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
                 FileManager
             </button>
-            <button class="btn btn-secondary" id="sidebarToggleBtn" style="padding: 8px 12px; font-size: 0.85rem;">
+            <button class="btn btn-secondary btn-sm" id="sidebarToggleBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
                 Controls
             </button>
         </div>
@@ -544,28 +1021,62 @@
 
     <div class="command-panel" id="commandPanel">
         <div class="command-input-area">
-            <input type="text" id="commandInput" placeholder="Enter command..." autocomplete="off">
+            <div class="command-input-wrap">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-5-6-5"/><path d="M12 19h8"/></svg>
+                <input type="text" id="commandInput" placeholder="Enter command..." autocomplete="off">
+            </div>
             <button class="btn btn-primary" id="commandExecuteBtn">Execute</button>
         </div>
     </div>
 
     <div class="files-panel" id="filesPanel">
-        <div class="files-toolbar">
-            <button class="btn btn-secondary" id="filesRefreshBtn">Refresh</button>
-            <button class="btn btn-secondary" id="filesParentBtn">Parent Dir</button>
-            <button class="btn btn-secondary" id="filesNewBtn">New</button>
-            <button class="btn btn-secondary" id="filesCopyBtn">Copy</button>
-            <button class="btn btn-secondary" id="filesMoveBtn">Move</button>
-            <button class="btn btn-secondary" id="filesDeleteBtn">Delete</button>
-            <button class="btn btn-secondary" id="filesUploadBtn">Upload</button>
-            <button class="btn btn-secondary" id="filesDownloadBtn">Download</button>
-            <input type="file" id="filesUploadInput" style="display: none;">
+        <div class="files-panel-inner">
+            <div class="files-toolbar">
+                <button class="btn btn-secondary" id="filesRefreshBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Refresh
+                </button>
+                <button class="btn btn-secondary" id="filesParentBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                    Parent Dir
+                </button>
+                <button class="btn btn-secondary" id="filesNewBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                    New
+                </button>
+                <button class="btn btn-secondary" id="filesCopyBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy
+                </button>
+                <button class="btn btn-secondary" id="filesMoveBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3"/><path d="M9 5l7 7-7 7"/><path d="M12 12h9"/></svg>
+                    Move
+                </button>
+                <button class="btn btn-secondary" id="filesDeleteBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    Delete
+                </button>
+                <button class="btn btn-secondary" id="filesUploadBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+                    Upload
+                </button>
+                <button class="btn btn-secondary" id="filesDownloadBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                    Download
+                </button>
+                <input type="file" id="filesUploadInput" style="display: none;">
+            </div>
+            <div class="files-path-container">
+                <input type="text" class="files-path-input" id="filesPathInput" placeholder="Enter path...">
+                <button class="btn btn-secondary" id="filesAccessBtn">Access</button>
+            </div>
+            <div class="files-list" id="filesList">
+                <div class="files-list-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    Loading...
+                </div>
+            </div>
         </div>
-        <div class="files-path-container">
-            <input type="text" class="files-path-input" id="filesPathInput" placeholder="Enter path...">
-            <button class="btn btn-secondary" id="filesAccessBtn">Access</button>
-        </div>
-        <div class="files-list" id="filesList"></div>
     </div>
 
     <div class="files-modal" id="filesModal">
@@ -596,42 +1107,52 @@
 
     <div class="main-container">
         <div class="chat-container">
-            <div class="chat-box" id="chatBox">
-            </div>
-            <div class="answering-indicator" id="answeringIndicator">
-                <div class="answering-dots">
-                    <span></span><span></span><span></span>
+            <div class="chat-scroll" id="chatBox">
+                <div class="chat-inner">
+                    <div class="welcome">
+                        <div class="welcome-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>
+                        </div>
+                        <h2>Welcome to Localaw</h2>
+                        <p>Ask me to read, write and manage files, run commands,<br>or automate tasks on your machine.</p>
+                    </div>
                 </div>
-                <span id="answeringText">AI is thinking...</span>
             </div>
-            <div class="input-area">
-                <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
-                <button class="btn btn-primary" id="sendBtn">Send</button>
+            <div class="composer-wrap">
+                <div class="answering-indicator" id="answeringIndicator">
+                    <div class="answering-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <span id="answeringText">AI is thinking...</span>
+                </div>
+                <div class="input-area">
+                    <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
+                    <button class="btn btn-primary" id="sendBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                        Send
+                    </button>
+                </div>
             </div>
         </div>
 
         <div class="sidebar" id="sidebar">
-            <div class="theme-toggle">
-                <button class="btn btn-secondary" id="themeToggle" style="width: 100%;">
-                    Switch to Dark Mode
-                </button>
+            <div class="sidebar-section">
+                <h3>Appearance</h3>
+                <button class="btn btn-secondary btn-block" id="themeToggle">Switch to Dark Mode</button>
             </div>
 
-            <div class="auth-section">
+            <div class="sidebar-section">
                 <h3>Authorization</h3>
                 <div class="auth-status">
                     <div class="status-dot" id="authDot"></div>
-                    <span id="authStatus">Authorization Required</span>
+                    <span class="auth-label" id="authStatus">Authorization Required</span>
                 </div>
-                <button class="btn btn-secondary" id="authToggle" style="width: 100%; margin-top: 10px;">
-                    Enable Auto Auth
-                </button>
+                <button class="btn btn-secondary btn-block" id="authToggle">Enable Auto Auth</button>
             </div>
 
-            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-                <button class="btn btn-danger" id="resetBtn" style="width: 100%;">
-                    Reset Conversation
-                </button>
+            <div class="sidebar-section">
+                <h3>Session</h3>
+                <button class="btn btn-danger btn-block" id="resetBtn">Reset Conversation</button>
             </div>
         </div>
     </div>
@@ -639,7 +1160,7 @@
     <div class="modal" id="cmdModal">
         <div class="modal-content">
             <h3>Command Authorization</h3>
-            <p>The AI has requested to execute the following command:</p>
+            <p class="modal-desc">The AI has requested to execute the following command:</p>
             <div class="modal-commands" id="modalCommands"></div>
             <div class="modal-actions">
                 <button class="btn btn-danger" id="modalDeny">Deny</button>
@@ -647,6 +1168,8 @@
             </div>
         </div>
     </div>
+
+    <div class="toast" id="toast"></div>
 
     <script>
         let pendingCommand = null;
@@ -663,11 +1186,23 @@
         const answeringIndicator = document.getElementById('answeringIndicator');
         const answeringText = document.getElementById('answeringText');
 
+        let toastTimer = null;
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.toggle('error', isError);
+            toast.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+        }
+
         async function loadConfig() {
-            const res = await fetch('/api/config');
-            const config = await res.json();
-            document.getElementById('modelName').textContent = 'Model: ' + config.model;
-            updateAuthUI(config.auth_mode);
+            try {
+                const res = await fetch('/api/config');
+                const config = await res.json();
+                document.getElementById('modelName').textContent = 'Model: ' + config.model;
+                updateAuthUI(config.auth_mode);
+            } catch (e) {}
         }
 
         function updateAuthUI(authMode) {
@@ -686,12 +1221,28 @@
 
         let autoScrollEnabled = true;
 
+        function makeBubble(type) {
+            const inner = chatBox.querySelector('.chat-inner') || chatBox;
+            const welcomeEl = inner.querySelector('.welcome');
+            if (welcomeEl) welcomeEl.remove();
+            const row = document.createElement('div');
+            row.className = 'msg-row ' + type;
+            const avatar = document.createElement('div');
+            avatar.className = 'avatar';
+            avatar.textContent = type === 'user' ? 'ME' : 'AI';
+            row.appendChild(avatar);
+            const bubble = document.createElement('div');
+            bubble.className = 'message ' + type;
+            row.appendChild(bubble);
+            inner.appendChild(row);
+            return bubble;
+        }
+
         function addMessage(content, type, commands = null) {
-            const div = document.createElement('div');
-            div.className = 'message ' + type;
+            const div = makeBubble(type);
 
             let displayText = String(content ?? '');
-            
+
             if (commands && commands.length > 0) {
                 const parts = displayText.split(/(```json\n?[\s\S]*?```)/g);
                 parts.forEach(part => {
@@ -720,17 +1271,17 @@
                 span.textContent = displayText.replace(/\t/g, '    ');
                 div.appendChild(span);
             }
-            
+
             if (type === 'system' && displayText.length > 500) {
                 const contentWrapper = document.createElement('div');
                 const innerContent = document.createElement('div');
                 innerContent.className = 'collapsible-content';
-                
+
                 while (div.firstChild) {
                     innerContent.appendChild(div.firstChild);
                 }
                 contentWrapper.appendChild(innerContent);
-                
+
                 const toggleBtn = document.createElement('button');
                 toggleBtn.className = 'collapsible-toggle show';
                 toggleBtn.textContent = 'Show more';
@@ -739,12 +1290,10 @@
                     toggleBtn.textContent = isExpanded ? 'Show less' : 'Show more';
                 };
                 contentWrapper.appendChild(toggleBtn);
-                
+
                 div.appendChild(contentWrapper);
             }
-            
-            chatBox.appendChild(div);
-            
+
             if (autoScrollEnabled) {
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
@@ -757,13 +1306,12 @@
             autoScrollEnabled = true;
             addMessage(msg, 'user');
             messageInput.value = '';
+            sendBtn.disabled = true;
 
-            const aiMsgDiv = document.createElement('div');
-            aiMsgDiv.className = 'message ai';
+            const aiMsgDiv = makeBubble('ai');
             const aiContentSpan = document.createElement('span');
             aiContentSpan.textContent = '';
             aiMsgDiv.appendChild(aiContentSpan);
-            chatBox.appendChild(aiMsgDiv);
 
             pendingCommand = null;
 
@@ -867,6 +1415,7 @@
                 answeringIndicator.classList.remove('show');
             } finally {
                 pendingCommand = null;
+                sendBtn.disabled = false;
             }
         }
 
@@ -875,12 +1424,17 @@
             if (cmd) {
                 const item = document.createElement('div');
                 item.className = 'modal-cmd-item';
-                item.innerHTML = `
-                    <div class="cmd-info">
-                        <div class="cmd-action">${cmd.action}</div>
-                        <div class="cmd-params">${JSON.stringify(cmd, null, 2).replace(/\n/g, '<br>')}</div>
-                    </div>
-                `;
+                const info = document.createElement('div');
+                info.className = 'cmd-info';
+                const action = document.createElement('div');
+                action.className = 'cmd-action';
+                action.textContent = String(cmd.action || '');
+                const params = document.createElement('div');
+                params.className = 'cmd-params';
+                params.textContent = JSON.stringify(cmd, null, 2);
+                info.appendChild(action);
+                info.appendChild(params);
+                item.appendChild(info);
                 modalCommands.appendChild(item);
             }
             cmdModal.classList.add('show');
@@ -921,7 +1475,7 @@
         authToggle.addEventListener('click', async () => {
             const currentMode = document.getElementById('authMode').textContent;
             const newMode = currentMode.includes('Required') ? '1' : '0';
-            
+
             const formData = new FormData();
             formData.append('mode', newMode);
 
@@ -934,7 +1488,7 @@
 
         resetBtn.addEventListener('click', async () => {
             await fetch('/api/reset', { method: 'POST' });
-            chatBox.innerHTML = '<div class="message system">Conversation reset.</div>';
+            chatBox.innerHTML = '<div class="chat-inner"><div class="msg-row system"><div class="message system">Conversation reset.</div></div></div>';
             await loadConfig();
         });
 
@@ -1019,6 +1573,9 @@
         let filesModalCallback = null;
         let filesPathModalCallback = null;
 
+        const FILE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>`;
+        const DIR_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+
         filesToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (filesPanel.classList.contains('visible')) {
@@ -1032,6 +1589,7 @@
 
         async function loadFilesList() {
             try {
+                filesList.innerHTML = '<div class="files-list-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Loading...</div>';
                 const res = await fetch('/api/files/list');
                 const data = await res.json();
                 if (data.error) {
@@ -1042,15 +1600,22 @@
                 filesPathInput.value = data.current_path;
                 filesList.innerHTML = '';
                 selectedFile = null;
-                
+
+                if (!data.items || data.items.length === 0) {
+                    filesList.innerHTML = '<div class="files-list-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Empty directory</div>';
+                }
+
                 data.items.forEach(item => {
                     const div = document.createElement('div');
                     div.className = 'files-item';
                     div.dataset.name = item.name;
                     div.dataset.isDir = item.is_dir;
+                    const iconColor = item.is_dir ? 'var(--warning)' : 'var(--text-muted)';
+                    const itemType = item.is_dir ? 'DIR' : 'FILE';
                     div.innerHTML = `
-                        <span class="files-item-icon">${item.is_dir ? '📁' : '📄'}</span>
-                        <span class="files-item-name">${item.name}</span>
+                        <span class="files-item-icon" style="color: ${iconColor};">${item.is_dir ? DIR_ICON : FILE_ICON}</span>
+                        <span class="files-item-name">${escapeHtml(item.name)}</span>
+                        <span class="files-item-type">${itemType}</span>
                         <span class="files-item-size">${item.is_dir ? '' : formatSize(item.size)}</span>
                     `;
                     div.addEventListener('click', () => {
@@ -1077,7 +1642,14 @@
                 });
             } catch (err) {
                 filesPathInput.value = 'Error: ' + err.message;
+                filesList.innerHTML = '';
             }
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[c]);
         }
 
         function formatSize(bytes) {
@@ -1165,7 +1737,7 @@
 
         document.getElementById('filesDeleteBtn').addEventListener('click', async () => {
             if (!selectedFile) {
-                alert('Please select a file or directory to delete.');
+                showToast('Please select a file or directory to delete.', true);
                 return;
             }
             if (!confirm(`Delete "${selectedFile.name}"?`)) return;
@@ -1175,12 +1747,13 @@
                 const res = await fetch('/api/files/delete', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.error) {
-                    alert('Error: ' + data.error);
+                    showToast('Error: ' + data.error, true);
                 } else {
+                    showToast('Deleted: ' + selectedFile.name);
                     await loadFilesList();
                 }
             } catch (err) {
-                alert('Error: ' + err.message);
+                showToast('Error: ' + err.message, true);
             }
         });
 
@@ -1197,19 +1770,20 @@
                 const res = await fetch('/api/files/upload', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.error) {
-                    alert('Error: ' + data.error);
+                    showToast('Error: ' + data.error, true);
                 } else {
+                    showToast('Uploaded: ' + file.name);
                     await loadFilesList();
                 }
             } catch (err) {
-                alert('Error: ' + err.message);
+                showToast('Error: ' + err.message, true);
             }
             filesUploadInput.value = '';
         });
 
         document.getElementById('filesDownloadBtn').addEventListener('click', () => {
             if (!selectedFile || selectedFile.is_dir) {
-                alert('Please select a file to download.');
+                showToast('Please select a file to download.', true);
                 return;
             }
             const path = filesPathInput.value + '/' + selectedFile.name;
@@ -1235,7 +1809,7 @@
 
         document.getElementById('filesCopyBtn').addEventListener('click', () => {
             if (!selectedFile) {
-                alert('Please select a file or directory to copy.');
+                showToast('Please select a file or directory to copy.', true);
                 return;
             }
             const srcPath = filesPathInput.value + '/' + selectedFile.name;
@@ -1244,7 +1818,7 @@
             filesPathModalConfirm.textContent = 'Copy';
             filesPathModalCallback = async (destPath) => {
                 if (!destPath) {
-                    alert('Please enter a destination path.');
+                    showToast('Please enter a destination path.', true);
                     return;
                 }
                 try {
@@ -1254,12 +1828,13 @@
                     const res = await fetch('/api/files/copy', { method: 'POST', body: formData });
                     const data = await res.json();
                     if (data.error) {
-                        alert('Error: ' + data.error);
+                        showToast('Error: ' + data.error, true);
                     } else {
+                        showToast('Copied: ' + selectedFile.name);
                         await loadFilesList();
                     }
                 } catch (err) {
-                    alert('Error: ' + err.message);
+                    showToast('Error: ' + err.message, true);
                 }
             };
             filesPathModal.classList.add('show');
@@ -1269,7 +1844,7 @@
 
         document.getElementById('filesMoveBtn').addEventListener('click', () => {
             if (!selectedFile) {
-                alert('Please select a file or directory to move.');
+                showToast('Please select a file or directory to move.', true);
                 return;
             }
             const srcPath = filesPathInput.value + '/' + selectedFile.name;
@@ -1278,7 +1853,7 @@
             filesPathModalConfirm.textContent = 'Move';
             filesPathModalCallback = async (destPath) => {
                 if (!destPath) {
-                    alert('Please enter a destination path.');
+                    showToast('Please enter a destination path.', true);
                     return;
                 }
                 try {
@@ -1288,12 +1863,13 @@
                     const res = await fetch('/api/files/move', { method: 'POST', body: formData });
                     const data = await res.json();
                     if (data.error) {
-                        alert('Error: ' + data.error);
+                        showToast('Error: ' + data.error, true);
                     } else {
+                        showToast('Moved: ' + selectedFile.name);
                         await loadFilesList();
                     }
                 } catch (err) {
-                    alert('Error: ' + err.message);
+                    showToast('Error: ' + err.message, true);
                 }
             };
             filesPathModal.classList.add('show');
