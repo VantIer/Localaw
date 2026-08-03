@@ -1,6 +1,7 @@
 import asyncio
 import json
 import threading
+import time
 from typing import Iterator, List, Optional
 
 from src.llm import LLMClient, CommandParser
@@ -34,6 +35,10 @@ class ModelModule:
         self._web_auth_event: Optional[threading.Event] = None
         self._web_auth_result: Optional[AuthResult] = None
 
+        # Stop request state
+        self._stop_lock = threading.Lock()
+        self._stop_requested = False
+
     def set_mode(self, mode: str):
         self._mode = mode
 
@@ -41,6 +46,7 @@ class ModelModule:
     # CLI mode: synchronous chat
     # ----------------------------------------------------------------
     def chat(self, message: str) -> ChatResult:
+        self._set_stop(False)
         self._conversation_history.append({"role": "user", "content": message})
 
         max_iterations = self._controller.get_config().round_limit
@@ -102,12 +108,18 @@ class ModelModule:
     # Web mode: async SSE streaming
     # ----------------------------------------------------------------
     async def chat_stream(self, message: str):
+        self._set_stop(False)
         self._conversation_history.append({"role": "user", "content": message})
 
         max_iterations = self._controller.get_config().round_limit
         iteration = 0
+        stopped = False
 
         while iteration < max_iterations:
+            if self._is_stop_requested():
+                stopped = True
+                break
+
             iteration += 1
             yield {"type": "answering", "iteration": iteration}
 
@@ -131,6 +143,10 @@ class ModelModule:
                         yield {"type": "chunk", "content": content}
 
                 self._conversation_history.append({"role": "assistant", "content": full_response})
+
+                if self._is_stop_requested():
+                    stopped = True
+                    break
 
                 parsed_commands, parse_errors = CommandParser.parse(full_response)
 
@@ -156,6 +172,10 @@ class ModelModule:
                 user_denied = False
 
                 for cmd in commands:
+                    if self._is_stop_requested():
+                        stopped = True
+                        break
+
                     action = cmd.get("action")
                     params = {k: v for k, v in cmd.items() if k != "action"}
 
@@ -178,6 +198,10 @@ class ModelModule:
                         # Run blocking wait in thread pool
                         auth_authorized = await asyncio.to_thread(self._wait_web_auth)
 
+                        if self._is_stop_requested():
+                            stopped = True
+                            break
+
                         if not auth_authorized:
                             yield {"type": "auth_denied", "message": "User denied command execution"}
                             user_denied = True
@@ -185,10 +209,13 @@ class ModelModule:
 
                     # Execute
                     yield {"type": "executing", "commands": [cmd]}
-                    result_str = self._command.execute(action, params)
+                    result_str = await asyncio.to_thread(self._command.execute, action, params)
                     result = ExecutionResult(action, params, result_str)
                     all_results.append(result)
                     yield {"type": "execution_done", "results": [result.to_dict()]}
+
+                if stopped:
+                    break
 
                 if user_denied:
                     self._conversation_history.append(
@@ -205,6 +232,8 @@ class ModelModule:
                 yield {"type": "error", "error": str(e)}
                 break
 
+        if stopped:
+            yield {"type": "stopped", "iteration": iteration}
         yield {"type": "done", "iteration": iteration}
 
     # ----------------------------------------------------------------
@@ -258,11 +287,30 @@ class ModelModule:
             self._web_auth_event.set()
 
     def _wait_web_auth(self) -> bool:
-        if self._web_auth_event:
-            self._web_auth_event.wait(timeout=300)
-            if self._web_auth_event.is_set() and self._web_auth_result:
-                return self._web_auth_result.authorized
+        if not self._web_auth_event:
+            return False
+        deadline = time.time() + 300
+        while not self._web_auth_event.is_set():
+            if self._is_stop_requested():
+                return False
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            self._web_auth_event.wait(timeout=min(1.0, remaining))
+        if self._web_auth_event.is_set() and self._web_auth_result:
+            return self._web_auth_result.authorized
         return False
+
+    def stop(self):
+        self._set_stop(True)
+
+    def _is_stop_requested(self) -> bool:
+        with self._stop_lock:
+            return self._stop_requested
+
+    def _set_stop(self, requested: bool):
+        with self._stop_lock:
+            self._stop_requested = requested
 
     # ----------------------------------------------------------------
     # Common helpers
@@ -270,6 +318,7 @@ class ModelModule:
     def reset_conversation(self):
         self._conversation_history = []
         self._controller.reset_auth()
+        self._set_stop(False)
 
     def get_history(self) -> list:
         return self._conversation_history

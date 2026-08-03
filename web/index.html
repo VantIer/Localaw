@@ -1173,10 +1173,32 @@
 
     <script>
         let pendingCommand = null;
+        let conversationActive = false;
 
         const chatBox = document.getElementById('chatBox');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
+
+        const SEND_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
+        const STOP_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+
+        function setSendButtonIdle() {
+            sendBtn.disabled = false;
+            sendBtn.className = 'btn btn-primary';
+            sendBtn.innerHTML = SEND_ICON + ' Send';
+        }
+
+        function setSendButtonStop() {
+            sendBtn.disabled = false;
+            sendBtn.className = 'btn btn-danger';
+            sendBtn.innerHTML = STOP_ICON + ' Stop';
+        }
+
+        function setSendButtonStopping() {
+            sendBtn.disabled = true;
+            sendBtn.className = 'btn btn-danger';
+            sendBtn.innerHTML = STOP_ICON + ' Stopping...';
+        }
         const cmdModal = document.getElementById('cmdModal');
         const modalCommands = document.getElementById('modalCommands');
         const authDot = document.getElementById('authDot');
@@ -1301,12 +1323,13 @@
 
         async function sendMessage() {
             const msg = messageInput.value.trim();
-            if (!msg) return;
+            if (!msg || conversationActive) return;
 
             autoScrollEnabled = true;
+            conversationActive = true;
+            setSendButtonStop();
             addMessage(msg, 'user');
             messageInput.value = '';
-            sendBtn.disabled = true;
 
             const aiMsgDiv = makeBubble('ai');
             const aiContentSpan = document.createElement('span');
@@ -1403,6 +1426,11 @@
                                     case 'auth_denied':
                                         addMessage(data.message || 'Authorization denied', 'system');
                                         break;
+
+                                    case 'stopped':
+                                        addMessage('Stopped by user.', 'system');
+                                        answeringIndicator.classList.remove('show');
+                                        break;
                                 }
                             } catch (e) {}
                         }
@@ -1415,7 +1443,9 @@
                 answeringIndicator.classList.remove('show');
             } finally {
                 pendingCommand = null;
-                sendBtn.disabled = false;
+                conversationActive = false;
+                setSendButtonIdle();
+                cmdModal.classList.remove('show');
             }
         }
 
@@ -1458,9 +1488,26 @@
             }
         }
 
-        sendBtn.addEventListener('click', sendMessage);
+        async function requestStop() {
+            if (!conversationActive) return;
+            setSendButtonStopping();
+            try {
+                await fetch('/api/stop', { method: 'POST' });
+            } catch (err) {
+                showToast('Failed to send stop request: ' + err.message, true);
+            }
+        }
+
+        sendBtn.addEventListener('click', () => {
+            if (conversationActive) {
+                requestStop();
+            } else {
+                sendMessage();
+            }
+        });
+
         messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+            if (e.key === 'Enter' && !conversationActive) sendMessage();
         });
 
         document.getElementById('modalDeny').addEventListener('click', async () => {
@@ -1934,6 +1981,7 @@
             if (e.key === 'Enter') sendDirectCommand();
         });
 
+        setSendButtonIdle();
         loadConfig();
     </script>
 </body>

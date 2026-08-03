@@ -74,6 +74,11 @@ class WebServer:
                 self._model.submit_web_auth(False, [])
                 return JSONResponse({"success": False, "error": str(e)})
 
+        @self._app.post("/api/stop")
+        async def stop_conversation():
+            self._model.stop()
+            return JSONResponse({"success": True})
+
         # ---- Auth mode ----
 
         @self._app.post("/api/set-auth")
