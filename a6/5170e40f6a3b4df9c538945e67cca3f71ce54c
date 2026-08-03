@@ -1,0 +1,18 @@
+src/model.py
+  h_f63364b2177cf7 4,38-41,49,111,116,119-122,147-150,175-178,201-204,212,217-219,235-236,290-301,304-314,321
+src/web_server.py
+  h_f63364b2177cf7 77-81
+web/index.html
+  h_f63364b2177cf7 1176,1181-1201,1326,1329-1330,1429-1433,1446-1448,1491-1508,1510,1984
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "a65170e40f6a3b4df9c538945e67cca3f71ce54c",
+  "prompts": {},
+  "humans": {
+    "h_f63364b2177cf7": {
+      "author": "VantIer <vantler@live.cn>"
+    }
+  }
+}
