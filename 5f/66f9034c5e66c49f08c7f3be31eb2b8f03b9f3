@@ -1,0 +1,16 @@
+SPEC.html
+  h_f63364b2177cf7 113
+src/model.py
+  h_f63364b2177cf7 38-40,99-103,197-198,256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "5f66f9034c5e66c49f08c7f3be31eb2b8f03b9f3",
+  "prompts": {},
+  "humans": {
+    "h_f63364b2177cf7": {
+      "author": "VantIer <vantler@live.cn>"
+    }
+  }
+}
