@@ -35,6 +35,9 @@ class ModelModule:
         self._web_auth_event: Optional[threading.Event] = None
         self._web_auth_result: Optional[AuthResult] = None
 
+        # CLI auth request flag (round counter reset on authorization trigger)
+        self._auth_was_requested = False
+
         # Stop request state
         self._stop_lock = threading.Lock()
         self._stop_requested = False
@@ -92,6 +95,11 @@ class ModelModule:
 
                 # Process commands serially via Command module
                 results = self._command.parse_and_execute(parsed_commands)
+
+                if self._auth_was_requested:
+                    # 授权申请触发时清零轮数，保证中途开启自动授权后仍有完整轮次预算
+                    self._auth_was_requested = False
+                    iteration = 0
 
                 result_text = "\n".join([self._format_result(r) for r in results])
                 self._conversation_history.append(
@@ -186,6 +194,8 @@ class ModelModule:
 
                     # Auth check
                     if self._controller.get_auth_mode() == 0:
+                        # 授权申请触发时清零轮数
+                        iteration = 0
                         yield {"type": "auth_required", "commands": [cmd]}
                         yield {"type": "waiting_auth", "iteration": iteration}
 
@@ -243,6 +253,7 @@ class ModelModule:
         return AuthResult(authorized=False, commands=[])
 
     def _request_auth_cli(self, commands: list) -> AuthResult:
+        self._auth_was_requested = True
         print("\n" + "=" * 50)
         print("Commands detected:")
         for i, cmd in enumerate(commands, 1):
