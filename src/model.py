@@ -49,11 +49,10 @@ class ModelModule:
         self._set_stop(False)
         self._conversation_history.append({"role": "user", "content": message})
 
-        max_iterations = self._controller.get_config().round_limit
         iteration = 0
         last_response = ""
 
-        while iteration < max_iterations:
+        while iteration < self._get_max_iterations():
             iteration += 1
             messages = [{"role": "system", "content": self._controller.get_config().system_prompt}]
             messages.extend(self._conversation_history)
@@ -111,11 +110,10 @@ class ModelModule:
         self._set_stop(False)
         self._conversation_history.append({"role": "user", "content": message})
 
-        max_iterations = self._controller.get_config().round_limit
         iteration = 0
         stopped = False
 
-        while iteration < max_iterations:
+        while iteration < self._get_max_iterations():
             if self._is_stop_requested():
                 stopped = True
                 break
@@ -315,6 +313,13 @@ class ModelModule:
     # ----------------------------------------------------------------
     # Common helpers
     # ----------------------------------------------------------------
+    def _get_max_iterations(self) -> float:
+        """多轮轮数限制：仅在自动授权模式(auth_mode=1)下生效；
+        需要授权模式(auth_mode=0)下不限制轮数。"""
+        if self._controller.get_auth_mode() == 0:
+            return float("inf")
+        return self._controller.get_config().round_limit
+
     def reset_conversation(self):
         self._conversation_history = []
         self._controller.reset_auth()

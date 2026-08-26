@@ -109,7 +109,7 @@
                 <point>当大模型尝试同时执行多个指令时，模型模块采用线性串行模式，逐个传入并调用命令模块，由命令模块逐个进行解析、获取授权及执行，每条指令的授权与执行结果独立处理</point>
                 <point>工具/指令执行完毕后，将结果返回给大模型，并自动进行下一轮对话</point>
                 <point>当大模型的返回中不含任何工具/指令调用时，对话停止并等待用户输入</point>
-                <point>受工具/指令调用所触发的多轮调用，轮数受配置文件中的round_limit值限制。到达限制值时自动停止对话</point>
+                <point>受工具/指令调用所触发的多轮调用，轮数受配置文件中的round_limit值限制。仅当授权模式为自动授权(auth_mode=1)时该限制生效；需要授权(auth_mode=0)时不做轮数限制。到达限制值时自动停止对话</point>
                 <point>模型模块开放一个授权请求接口request_auth(commands: list) -> AuthResult，供命令模块调用，以向用户申请授权</point>
                 <point>CLI模式下授权请求在终端展示待执行命令列表，等待用户输入/y、/n、/y-all、/n-all</point>
                 <point>Web模式下授权请求通过SSE推送auth_required事件，等待前端通过/api/authorize-execute接口返回授权结果</point>

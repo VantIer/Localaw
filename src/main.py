@@ -53,7 +53,7 @@ def main(config_path: str = "config.json"):
     print("\n")
     print("Note: Multi-turn conversation is enabled. After command")
     print("      execution, results will be fed back to AI for")
-    print(f"      further processing (max {controller.get_config().round_limit} iterations).")
+    print("      further processing (round limit only applies in auto-auth mode).")
     print("\n")
 
     while True:

@@ -11,7 +11,7 @@ A local AI assistant that connects to remote LLM APIs and executes commands on y
 - Authorization modes: Always ask or Session-based
 - CLI and Web interface
 - File operations and command execution
-- Multi-turn conversation: AI can continue executing based on results (up to 20 rounds)
+- Multi-turn conversation: AI can continue executing based on results (up to 20 rounds in auto-auth mode; unlimited when authorization is required)
 - Web interface: FileManager, Command panel
 
 ## Setup
@@ -43,7 +43,7 @@ Edit `config.json`:
 - `api_base`: LLM API address
 - `api_key`: API key
 - `model`: Model name
-- `round_limit`: Max conversation rounds (default: 20)
+- `round_limit`: Max conversation rounds (default: 20). Only applies in auto-auth mode (auth_mode=1); unlimited when authorization is required (auth_mode=0)
 - `listen_host`: Web server listen address
 - `listen_port`: Web server listen port
 

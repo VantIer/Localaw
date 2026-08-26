@@ -9,7 +9,7 @@
 - 授权模式：每次询问或会话授权
 - CLI 和 Web 界面
 - 文件操作和命令执行
-- 多轮对话：AI 可根据执行结果自动继续执行（最多 20 轮）
+- 多轮对话：AI 可根据执行结果自动继续执行（自动授权模式下最多 20 轮；需要授权时不限制轮数）
 - Web 界面：FileManager 文件管理器、Command 命令执行面板
 
 ## 安装
@@ -41,7 +41,7 @@ pip install -r requirements.txt
 - `api_base`：LLM API 地址
 - `api_key`：API 密钥
 - `model`：模型名称
-- `round_limit`：多轮对话最大轮数，默认 20
+- `round_limit`：多轮对话最大轮数，默认 20。仅在自动授权模式（auth_mode=1）下生效；需要授权模式（auth_mode=0）下不限制轮数
 - `listen_host`：Web 服务监听地址
 - `listen_port`：Web 服务监听端口
 
