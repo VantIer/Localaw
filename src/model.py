@@ -1,25 +1,21 @@
 import asyncio
-import json
 import threading
 import time
-from typing import Iterator, List, Optional
+from typing import List, Optional
 
 from src.llm import LLMClient, CommandParser
 from src.command import ExecutionResult
 
 
 class ChatResult:
-    def __init__(self, response=None, commands=None, executions=None, error=None):
+    def __init__(self, response=None, error=None):
         self.response = response or ""
-        self.commands = commands or []
-        self.executions = executions or []
         self.error = error
 
 
 class AuthResult:
-    def __init__(self, authorized=False, commands=None):
+    def __init__(self, authorized=False):
         self.authorized = authorized
-        self.commands = commands or []
 
 
 class ModelModule:
@@ -41,9 +37,6 @@ class ModelModule:
         # Stop request state
         self._stop_lock = threading.Lock()
         self._stop_requested = False
-
-    def set_mode(self, mode: str):
-        self._mode = mode
 
     # ----------------------------------------------------------------
     # CLI mode: synchronous chat
@@ -119,6 +112,7 @@ class ModelModule:
         self._conversation_history.append({"role": "user", "content": message})
 
         iteration = 0
+        turn = 0
         stopped = False
 
         while iteration < self._get_max_iterations():
@@ -127,7 +121,8 @@ class ModelModule:
                 break
 
             iteration += 1
-            yield {"type": "answering", "iteration": iteration}
+            turn += 1
+            yield {"type": "answering", "iteration": turn}
 
             messages = [{"role": "system", "content": self._controller.get_config().system_prompt}]
             messages.extend(self._conversation_history)
@@ -194,10 +189,10 @@ class ModelModule:
 
                     # Auth check
                     if self._controller.get_auth_mode() == 0:
-                        # 授权申请触发时清零轮数
+                        # 授权申请触发时清零轮数（仅影响 round_limit 循环计数）
                         iteration = 0
                         yield {"type": "auth_required", "commands": [cmd]}
-                        yield {"type": "waiting_auth", "iteration": iteration}
+                        yield {"type": "waiting_auth", "iteration": turn}
 
                         # Wait for web auth callback
                         self._web_auth_event = threading.Event()
@@ -241,8 +236,8 @@ class ModelModule:
                 break
 
         if stopped:
-            yield {"type": "stopped", "iteration": iteration}
-        yield {"type": "done", "iteration": iteration}
+            yield {"type": "stopped", "iteration": turn}
+        yield {"type": "done", "iteration": turn}
 
     # ----------------------------------------------------------------
     # Auth interfaces
@@ -250,7 +245,7 @@ class ModelModule:
     def request_auth(self, commands: list) -> AuthResult:
         if self._mode == "cli":
             return self._request_auth_cli(commands)
-        return AuthResult(authorized=False, commands=[])
+        return AuthResult(authorized=False)
 
     def _request_auth_cli(self, commands: list) -> AuthResult:
         self._auth_was_requested = True
@@ -278,20 +273,20 @@ class ModelModule:
             auth = input("\nYour choice: ").strip().lower()
 
             if auth == "/y":
-                return AuthResult(authorized=True, commands=commands)
+                return AuthResult(authorized=True)
             elif auth == "/n":
-                return AuthResult(authorized=False, commands=[])
+                return AuthResult(authorized=False)
             elif auth == "/y-all":
                 self._controller.set_auth_mode(1)
-                return AuthResult(authorized=True, commands=commands)
+                return AuthResult(authorized=True)
             elif auth == "/n-all":
                 self._controller.set_auth_mode(0)
-                return AuthResult(authorized=False, commands=[])
+                return AuthResult(authorized=False)
             else:
                 print("Unknown command. Valid options: /y, /n, /y-all, /n-all")
 
     def submit_web_auth(self, authorized: bool, commands: list):
-        self._web_auth_result = AuthResult(authorized=authorized, commands=commands)
+        self._web_auth_result = AuthResult(authorized=authorized)
         if self._web_auth_event:
             self._web_auth_event.set()
 

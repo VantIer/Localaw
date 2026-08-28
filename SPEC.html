@@ -121,13 +121,13 @@
                     Web模式：SSE流式输出，分步推送事件。必须使用流式LLM调用，逐chunk推送。授权交互通过前端弹窗确认，通过API返回结果。结果展示通过SSE事件推送至前端渲染。错误在对话窗口中显示，样式同指令执行结果。
                 </cli-vs-web>
                 <api>
-                    chat(message: str) -> ChatResult：CLI模式同步阻塞调用，返回完整结果（含LLM响应、命令列表、执行结果、错误信息）
+                    chat(message: str) -> ChatResult：CLI模式同步阻塞调用，返回LLM响应与错误信息
                 </api>
                 <api>
                     chat_stream(message: str) -> Iterator[SSEEvent]：Web模式流式调用，返回SSE事件迭代器，逐步推送
                 </api>
                 <api>
-                    request_auth(commands: list) -> AuthResult：供Command模块调用，向用户申请授权。CLI模式阻塞等待终端输入，Web模式阻塞等待API回调。AuthResult包含authorized(bool)和commands(list)
+                    request_auth(commands: list) -> AuthResult：供Command模块调用，向用户申请授权。CLI模式阻塞等待终端输入，Web模式阻塞等待API回调。AuthResult包含authorized(bool)
                 </api>
                 <api>
                     reset_conversation()：清除会话历史，通知Controller重置授权状态
@@ -195,7 +195,6 @@
                 <description>文件模块，负责文件管理功能，为Command模块的文件类命令和Web模式的文件管理API提供统一执行层。</description>
                 <point>不设置路径访问限制</point>
                 <operation>list_dir(path: str = ".") -> str：列出指定目录下的文件和子目录</operation>
-                <operation>create_file(path: str) -> str：创建空文件</operation>
                 <operation>create_dir(path: str) -> str：创建目录（含父目录）</operation>
                 <operation>delete(path: str) -> str：删除文件或目录</operation>
                 <operation>rename(path: str, new_name: str) -> str：重命名文件或目录</operation>

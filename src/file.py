@@ -20,15 +20,6 @@ class FileModule:
         except Exception as e:
             return f"Error listing directory: {str(e)}"
 
-    def create_file(self, path: str) -> str:
-        try:
-            target = Path(path).resolve()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.touch()
-            return f"Successfully created file: {path}"
-        except Exception as e:
-            return f"Error creating file: {str(e)}"
-
     def create_dir(self, path: str) -> str:
         try:
             target = Path(path).resolve()

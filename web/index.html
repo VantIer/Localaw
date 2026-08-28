@@ -222,15 +222,6 @@
             background: var(--bg-subtle);
             border-color: var(--text-faint);
         }
-        .btn-ghost {
-            background: transparent;
-            color: var(--text-muted);
-            border-color: var(--border);
-        }
-        .btn-ghost:hover:not(:disabled) {
-            background: var(--bg-subtle);
-            color: var(--text);
-        }
         .btn-danger {
             background: var(--danger);
             color: #fff;
@@ -380,22 +371,6 @@
             max-width: 95%;
             font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
         }
-        .message .cmd-block {
-            background: var(--bg-inset);
-            padding: 12px 14px;
-            border-radius: 10px;
-            margin-top: 10px;
-            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-            font-size: 0.8rem;
-            white-space: pre-wrap;
-            overflow-x: auto;
-            border: 1px solid var(--border);
-            color: var(--text);
-        }
-        .message.user .cmd-block {
-            background: rgba(255, 255, 255, 0.16);
-            border-color: rgba(255, 255, 255, 0.25);
-        }
         .collapsible-content {
             max-height: 200px;
             overflow: hidden;
@@ -544,18 +519,6 @@
             color: var(--text-faint);
             margin-bottom: 14px;
         }
-        .setting-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-        .setting-label {
-            font-size: 0.875rem;
-            color: var(--text);
-            font-weight: 500;
-        }
         .auth-status {
             display: flex;
             align-items: center;
@@ -674,9 +637,6 @@
         .files-toolbar .btn {
             padding: 8px 14px;
             font-size: 0.82rem;
-        }
-        .files-toolbar .spacer {
-            flex: 1;
         }
         .files-path-container {
             display: flex;
@@ -1241,6 +1201,27 @@
             }
         }
 
+        async function loadHistory() {
+            try {
+                const res = await fetch('/api/history');
+                const data = await res.json();
+                const history = data.history || [];
+                if (!history.length) return;
+
+                for (const msg of history) {
+                    if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+                    const content = String(msg.content || '');
+                    if (msg.role === 'assistant') {
+                        addMessage(content, 'ai');
+                    } else if (content.startsWith('Command execution result:')) {
+                        addMessage(content.replace(/^Command execution result:\n?/, ''), 'system');
+                    } else {
+                        addMessage(content, 'user');
+                    }
+                }
+            } catch (e) {}
+        }
+
         let autoScrollEnabled = true;
 
         function makeBubble(type) {
@@ -1260,39 +1241,13 @@
             return bubble;
         }
 
-        function addMessage(content, type, commands = null) {
+        function addMessage(content, type) {
             const div = makeBubble(type);
 
-            let displayText = String(content ?? '');
-
-            if (commands && commands.length > 0) {
-                const parts = displayText.split(/(```json\n?[\s\S]*?```)/g);
-                parts.forEach(part => {
-                    if (part.match(/^```json\n?([\s\S]*?)```$/)) {
-                        const json = part.replace(/^```json\n?([\s\S]*?)```$/, '$1');
-                        try {
-                            const obj = JSON.parse(json);
-                            const cmdDiv = document.createElement('div');
-                            cmdDiv.className = 'cmd-block';
-                            cmdDiv.textContent = 'Action: ' + obj.action + '\nParams: ' + JSON.stringify(obj, null, 2).replace(/\t/g, '    ');
-                            div.appendChild(cmdDiv);
-                        } catch {
-                            const cmdDiv = document.createElement('div');
-                            cmdDiv.className = 'cmd-block';
-                            cmdDiv.textContent = json.replace(/\t/g, '    ');
-                            div.appendChild(cmdDiv);
-                        }
-                    } else {
-                        const span = document.createElement('span');
-                        span.textContent = part.replace(/\t/g, '    ');
-                        div.appendChild(span);
-                    }
-                });
-            } else {
-                const span = document.createElement('span');
-                span.textContent = displayText.replace(/\t/g, '    ');
-                div.appendChild(span);
-            }
+            const displayText = String(content ?? '');
+            const span = document.createElement('span');
+            span.textContent = displayText.replace(/\t/g, '    ');
+            div.appendChild(span);
 
             if (type === 'system' && displayText.length > 500) {
                 const contentWrapper = document.createElement('div');
@@ -1331,10 +1286,8 @@
             addMessage(msg, 'user');
             messageInput.value = '';
 
-            const aiMsgDiv = makeBubble('ai');
-            const aiContentSpan = document.createElement('span');
-            aiContentSpan.textContent = '';
-            aiMsgDiv.appendChild(aiContentSpan);
+            let aiMsgDiv = null;
+            let aiContentSpan = null;
 
             pendingCommand = null;
 
@@ -1368,12 +1321,14 @@
                                     case 'answering':
                                         answeringIndicator.classList.add('show');
                                         answeringText.textContent = `AI is thinking... (Round ${data.iteration})`;
-                                        if (data.iteration > 1) {
-                                            aiContentSpan.textContent += '\n\n';
-                                        }
+                                        aiMsgDiv = makeBubble('ai');
+                                        aiContentSpan = document.createElement('span');
+                                        aiContentSpan.textContent = '';
+                                        aiMsgDiv.appendChild(aiContentSpan);
                                         break;
 
                                     case 'chunk':
+                                        if (!aiContentSpan) break;
                                         aiContentSpan.textContent += data.content;
                                         if (autoScrollEnabled) {
                                             chatBox.scrollTop = chatBox.scrollHeight;
@@ -1419,7 +1374,11 @@
                                         break;
 
                                     case 'error':
-                                        aiContentSpan.textContent += `\n[Error: ${data.error}]`;
+                                        if (aiContentSpan) {
+                                            aiContentSpan.textContent += `\n[Error: ${data.error}]`;
+                                        } else {
+                                            addMessage('[Error: ' + data.error + ']', 'system');
+                                        }
                                         answeringIndicator.classList.remove('show');
                                         break;
 
@@ -1983,6 +1942,7 @@
 
         setSendButtonIdle();
         loadConfig();
+        loadHistory();
     </script>
 </body>
 </html>

@@ -1,7 +1,6 @@
 import sys
 import os
 import json
-import asyncio
 from pathlib import Path
 
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -11,8 +10,8 @@ else:
 
 sys.path.insert(0, base_path)
 
-from fastapi import FastAPI, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
+from fastapi import FastAPI, Form, UploadFile, File
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 import uvicorn
 
 from src.controller import Controller
@@ -236,19 +235,3 @@ class WebServer:
     def run(self):
         config = self._controller.get_config()
         uvicorn.run(self._app, host=config.listen_host, port=config.listen_port, log_level="info")
-
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Localaw Web Server")
-    parser.add_argument("--config", default="config.json", help="Path to config file")
-    args = parser.parse_args()
-
-    server = WebServer(args.config)
-    print(f"Starting Localaw Web Server...")
-    print(f"Open http://{server._controller.get_config().listen_host}:{server._controller.get_config().listen_port} in your browser")
-    server.run()
-
-
-if __name__ == "__main__":
-    main()

@@ -1,6 +1,6 @@
 import platform
 import subprocess
-from typing import Dict, List
+from typing import List
 
 from src.file import FileModule
 
