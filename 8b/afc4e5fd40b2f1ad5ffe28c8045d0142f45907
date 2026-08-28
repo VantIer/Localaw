@@ -1,0 +1,19 @@
+SPEC.html
+  s_f316a2bc9e402a::t_187ea32e17111c 124,130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "8bafc4e5fd40b2f1ad5ffe28c8045d0142f45907",
+  "prompts": {},
+  "sessions": {
+    "s_f316a2bc9e402a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_fb95453c5ffeNf2Bb26vNBqlEa",
+        "model": "unknown"
+      },
+      "human_author": "VantIer <vantler@live.cn>"
+    }
+  }
+}
