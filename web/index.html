@@ -519,32 +519,79 @@
             color: var(--text-faint);
             margin-bottom: 14px;
         }
-        .auth-status {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 16px;
-            padding: 12px 14px;
+        .auth-segmented {
+            position: relative;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            padding: 4px;
             border-radius: 12px;
-            background: var(--bg-subtle);
+            background: var(--bg-inset);
             border: 1px solid var(--border);
+            user-select: none;
         }
-        .auth-status .auth-label {
-            font-size: 0.84rem;
+        .auth-thumb {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: calc((100% - 8px) / 3);
+            height: calc(100% - 8px);
+            border-radius: 9px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-strong);
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 0;
+        }
+        .auth-seg {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 8px 4px;
+            border: none;
+            border-radius: 9px;
+            background: transparent;
+            cursor: pointer;
+            font-size: 0.78rem;
             font-weight: 600;
+            color: var(--text-muted);
+            transition: color 0.18s ease;
+        }
+        .auth-seg:hover {
             color: var(--text);
         }
-        .status-dot {
-            width: 10px;
-            height: 10px;
+        .auth-seg.active {
+            color: var(--primary);
+        }
+        .auth-seg .seg-dot {
+            display: none;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            background: var(--danger);
-            box-shadow: 0 0 0 4px var(--danger-soft);
             flex-shrink: 0;
         }
-        .status-dot.authorized {
+        .auth-seg.active .seg-dot {
+            display: inline-block;
+        }
+        .auth-seg[data-mode="0"].active .seg-dot {
+            background: var(--danger);
+            box-shadow: 0 0 0 3px var(--danger-soft);
+        }
+        .auth-seg[data-mode="1"].active .seg-dot {
+            background: var(--warning);
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+        }
+        .auth-seg[data-mode="2"].active .seg-dot {
             background: var(--success);
-            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15);
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+        }
+        .auth-desc {
+            margin-top: 10px;
+            font-size: 0.74rem;
+            line-height: 1.5;
+            color: var(--text-muted);
         }
 
         .command-panel {
@@ -960,7 +1007,7 @@
             <div class="header-info">
                 <span id="modelName">Model: --</span>
                 <span class="sep">|</span>
-                <span id="authMode">Auth: Required</span>
+                <span id="authMode">Auth: N-Auto</span>
             </div>
         </div>
         <div class="header-buttons">
@@ -1009,7 +1056,7 @@
                     Copy
                 </button>
                 <button class="btn btn-secondary" id="filesMoveBtn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3"/><path d="M9 5l7 7-7 7"/><path d="M12 12h9"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
                     Move
                 </button>
                 <button class="btn btn-secondary" id="filesDeleteBtn">
@@ -1103,11 +1150,13 @@
 
             <div class="sidebar-section">
                 <h3>Authorization</h3>
-                <div class="auth-status">
-                    <div class="status-dot" id="authDot"></div>
-                    <span class="auth-label" id="authStatus">Authorization Required</span>
+                <div class="auth-segmented" id="authSegmented">
+                    <div class="auth-thumb" id="authThumb"></div>
+                    <button class="auth-seg active" data-mode="0"><span class="seg-dot"></span>N-Auto</button>
+                    <button class="auth-seg" data-mode="1"><span class="seg-dot"></span>H-Auto</button>
+                    <button class="auth-seg" data-mode="2"><span class="seg-dot"></span>F-Auto</button>
                 </div>
-                <button class="btn btn-secondary btn-block" id="authToggle">Enable Auto Auth</button>
+                <div class="auth-desc" id="authDesc">No-Auto: all commands require authorization.</div>
             </div>
 
             <div class="sidebar-section">
@@ -1161,9 +1210,9 @@
         }
         const cmdModal = document.getElementById('cmdModal');
         const modalCommands = document.getElementById('modalCommands');
-        const authDot = document.getElementById('authDot');
-        const authStatus = document.getElementById('authStatus');
-        const authToggle = document.getElementById('authToggle');
+        const authSegmented = document.getElementById('authSegmented');
+        const authThumb = document.getElementById('authThumb');
+        const authSegs = Array.from(authSegmented.querySelectorAll('.auth-seg'));
         const resetBtn = document.getElementById('resetBtn');
         const answeringIndicator = document.getElementById('answeringIndicator');
         const answeringText = document.getElementById('answeringText');
@@ -1188,17 +1237,19 @@
         }
 
         function updateAuthUI(authMode) {
-            const isAuto = authMode === 1;
-            document.getElementById('authMode').textContent = 'Auth: ' + (isAuto ? 'Auto' : 'Required');
-            if (isAuto) {
-                authDot.classList.add('authorized');
-                authStatus.textContent = 'Auto Authorized';
-                authToggle.textContent = 'Require Authorization';
-            } else {
-                authDot.classList.remove('authorized');
-                authStatus.textContent = 'Authorization Required';
-                authToggle.textContent = 'Enable Auto Auth';
-            }
+            const mode = [0, 1, 2].includes(authMode) ? authMode : 0;
+            const names = ['N-Auto', 'H-Auto', 'F-Auto'];
+            const descs = [
+                'No-Auto: all commands require authorization.',
+                'Half-Auto: low-risk commands (read/list) run automatically; high-risk commands (create/delete/edit/execute) require authorization.',
+                'Full-Auto: all commands run automatically without authorization.'
+            ];
+            document.getElementById('authMode').textContent = 'Auth: ' + names[mode];
+            document.getElementById('authDesc').textContent = descs[mode];
+            authThumb.style.transform = `translateX(${mode * 100}%)`;
+            authSegs.forEach((seg) => {
+                seg.classList.toggle('active', Number(seg.dataset.mode) === mode);
+            });
         }
 
         async function loadHistory() {
@@ -1386,6 +1437,10 @@
                                         addMessage(data.message || 'Authorization denied', 'system');
                                         break;
 
+                                    case 'parse_error':
+                                        addMessage('JSON parse error:\n' + (data.errors || []).join('\n'), 'system');
+                                        break;
+
                                     case 'stopped':
                                         addMessage('Stopped by user.', 'system');
                                         answeringIndicator.classList.remove('show');
@@ -1431,11 +1486,9 @@
 
         async function submitAuth(authorized) {
             cmdModal.classList.remove('show');
-            const cmd = pendingCommand;
             try {
                 const formData = new FormData();
                 formData.append('authorized', authorized ? 'true' : 'false');
-                formData.append('commands', JSON.stringify(authorized && cmd ? [cmd] : []));
                 await fetch('/api/authorize-execute', {
                     method: 'POST',
                     body: formData
@@ -1478,18 +1531,24 @@
             await submitAuth(true);
         });
 
-        authToggle.addEventListener('click', async () => {
-            const currentMode = document.getElementById('authMode').textContent;
-            const newMode = currentMode.includes('Required') ? '1' : '0';
-
+        async function setAuthMode(mode) {
             const formData = new FormData();
-            formData.append('mode', newMode);
-
-            await fetch('/api/set-auth', {
-                method: 'POST',
-                body: formData
-            });
+            formData.append('mode', String(mode));
+            try {
+                await fetch('/api/set-auth', {
+                    method: 'POST',
+                    body: formData
+                });
+            } catch (err) {
+                showToast('Failed to set auth mode: ' + err.message, true);
+            }
             await loadConfig();
+        }
+
+        authSegs.forEach((seg) => {
+            seg.addEventListener('click', () => {
+                setAuthMode(Number(seg.dataset.mode));
+            });
         });
 
         resetBtn.addEventListener('click', async () => {

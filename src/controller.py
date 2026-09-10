@@ -7,7 +7,8 @@ from src.config import Config
 class Controller:
     def __init__(self, config_path: str = "config.json"):
         self._config = Config(config_path)
-        self._auth_mode = self._config.auth_mode
+        configured_mode = self._config.auth_mode
+        self._auth_mode = configured_mode if configured_mode in (0, 1, 2) else 0
         self._auth_mode_initial = self._auth_mode
         self._lock = threading.Lock()
         self._init_system_info()
@@ -34,6 +35,8 @@ class Controller:
             return self._auth_mode
 
     def set_auth_mode(self, mode: int):
+        if mode not in (0, 1, 2):
+            raise ValueError("auth mode must be 0, 1, or 2")
         with self._lock:
             self._auth_mode = mode
 

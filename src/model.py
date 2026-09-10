@@ -188,7 +188,7 @@ class ModelModule:
                         continue
 
                     # Auth check
-                    if self._controller.get_auth_mode() == 0:
+                    if self._command.requires_auth(action):
                         # 授权申请触发时清零轮数（仅影响 round_limit 循环计数）
                         iteration = 0
                         yield {"type": "auth_required", "commands": [cmd]}
@@ -251,7 +251,7 @@ class ModelModule:
         self._auth_was_requested = True
         print("\n" + "=" * 50)
         print("Commands detected:")
-        for i, cmd in enumerate(commands, 1):
+        for cmd in commands:
             action = cmd.get("action")
             params = {k: v for k, v in cmd.items() if k != "action"}
             if action == "exec_cmd":
@@ -263,10 +263,9 @@ class ModelModule:
 
         print("\n" + "-" * 50)
         print("Authorization options:")
-        print("  /y      - Execute this command")
-        print("  /n      - Deny this command")
-        print("  /y-all  - Execute and auto-authorize subsequent")
-        print("  /n-all  - Require authorization for subsequent")
+        print("  /y            - Allow current command")
+        print("  /n            - Deny current command")
+        print("  /auth 0|1|2   - Switch mode, then re-evaluate current command")
         print("-" * 50)
 
         while True:
@@ -276,16 +275,24 @@ class ModelModule:
                 return AuthResult(authorized=True)
             elif auth == "/n":
                 return AuthResult(authorized=False)
-            elif auth == "/y-all":
-                self._controller.set_auth_mode(1)
-                return AuthResult(authorized=True)
-            elif auth == "/n-all":
-                self._controller.set_auth_mode(0)
-                return AuthResult(authorized=False)
+            elif auth.startswith("/auth"):
+                parts = auth.split()
+                if len(parts) == 2 and parts[1] in ("0", "1", "2"):
+                    self._controller.set_auth_mode(int(parts[1]))
+                    if not any(
+                        self._command.requires_auth(c.get("action")) for c in commands
+                    ):
+                        return AuthResult(authorized=True)
+                    print(
+                        "Authorization still required for the current command. "
+                        "Please choose /y, /n, or /auth 0|1|2."
+                    )
+                else:
+                    print("Invalid mode. Usage: /auth 0|1|2")
             else:
-                print("Unknown command. Valid options: /y, /n, /y-all, /n-all")
+                print("Unknown command. Valid options: /y, /n, /auth 0|1|2")
 
-    def submit_web_auth(self, authorized: bool, commands: list):
+    def submit_web_auth(self, authorized: bool):
         self._web_auth_result = AuthResult(authorized=authorized)
         if self._web_auth_event:
             self._web_auth_event.set()
@@ -319,11 +326,9 @@ class ModelModule:
     # ----------------------------------------------------------------
     # Common helpers
     # ----------------------------------------------------------------
-    def _get_max_iterations(self) -> float:
-        """多轮轮数限制：仅在自动授权模式(auth_mode=1)下生效；
-        需要授权模式(auth_mode=0)下不限制轮数。"""
-        if self._controller.get_auth_mode() == 0:
-            return float("inf")
+    def _get_max_iterations(self) -> int:
+        """多轮轮数限制：恒定受 round_limit 约束。
+        触发授权时会立即将轮数计数器清零，从而在授权后获得完整轮次预算。"""
         return self._controller.get_config().round_limit
 
     def reset_conversation(self):

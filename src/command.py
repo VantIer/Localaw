@@ -25,6 +25,10 @@ class CommandModule:
         "read_file", "write_file", "delete_file", "edit_file", "rename_file",
     }
 
+    LOW_RISK_ACTIONS = {"list_dir", "read_file"}
+
+    HIGH_RISK_ACTIONS = (FILE_ACTIONS | {"exec_cmd"}) - LOW_RISK_ACTIONS
+
     FORBIDDEN_PATTERNS = ["rm -rf /"]
 
     def __init__(self, controller, file_module: FileModule):
@@ -51,6 +55,19 @@ class CommandModule:
                 return False
         return True
 
+    def is_high_risk(self, action: str) -> bool:
+        return action in self.HIGH_RISK_ACTIONS
+
+    def requires_auth(self, action: str) -> bool:
+        """根据当前授权模式与指令风险等级判断是否需要申请授权。
+        0=需要授权，1=低风险自动授权(高风险需授权)，2=自动授权"""
+        mode = self._controller.get_auth_mode()
+        if mode == 0:
+            return True
+        if mode == 1:
+            return self.is_high_risk(action)
+        return False
+
     def parse_and_execute(self, commands: list) -> List[ExecutionResult]:
         results = []
         for cmd in commands:
@@ -63,7 +80,7 @@ class CommandModule:
                 ))
                 continue
 
-            if self._controller.get_auth_mode() == 0:
+            if self.requires_auth(action):
                 auth_result = self._model.request_auth([cmd])
                 if not auth_result.authorized:
                     results.append(ExecutionResult(

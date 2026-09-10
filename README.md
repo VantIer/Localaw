@@ -8,10 +8,10 @@ A local AI assistant that connects to remote LLM APIs and executes commands on y
 
 - Connect to OpenAI-compatible LLM APIs (Ollama, vLLM, etc.)
 - Execute commands on local system based on AI responses
-- Authorization modes: Always ask or Session-based
+- Authorization modes: No-Auto (auth_mode=0), Half-Auto (auth_mode=1), Full-Auto (auth_mode=2)
 - CLI and Web interface
 - File operations and command execution
-- Multi-turn conversation: AI can continue executing based on results (up to 20 rounds in auto-auth mode; unlimited when authorization is required)
+- Multi-turn conversation: AI can continue executing based on results (bounded by `round_limit` in all modes; the counter resets whenever an authorization request is triggered)
 - Web interface: FileManager, Command panel
 
 ## Setup
@@ -43,7 +43,11 @@ Edit `config.json`:
 - `api_base`: LLM API address
 - `api_key`: API key
 - `model`: Model name
-- `round_limit`: Max conversation rounds (default: 20). Only applies in auto-auth mode (auth_mode=1); unlimited when authorization is required (auth_mode=0)
+- `round_limit`: Max conversation rounds (default: 20). Applies in all modes; the counter resets whenever an authorization request is triggered
+- `auth_mode`: Authorization mode (default: 0)
+  - `0` = No-Auto: every command requires authorization
+  - `1` = Half-Auto: low-risk commands (read/list) are auto-authorized; high-risk commands (create/delete/edit/execute shell, etc.) require authorization
+  - `2` = Full-Auto: all commands are auto-authorized
 - `listen_host`: Web server listen address
 - `listen_port`: Web server listen port
 
@@ -67,7 +71,7 @@ Then open http://127.0.0.1:8880 in your browser.
 
 ### Web Interface Features
 
-- **Controls panel**: Theme toggle, auth mode, conversation reset
+- **Controls panel**: Theme toggle, auth mode switch (N-Auto / H-Auto / F-Auto), conversation reset
 - **Command panel**: Execute shell commands directly
 - **FileManager**:
   - Browse directories (click to select, double-click to enter)
@@ -77,10 +81,15 @@ Then open http://127.0.0.1:8880 in your browser.
 
 Click the buttons on the right side of the header to open panels. Only one panel can be open at a time.
 
-![Main Interface](./Docs/web_main.png)
-![Controls Panel](./Docs/web_ctrl.png)
-![Command Panel](./Docs/web_cmd.png)
-![FileManager](./Docs/web_file.png)
+### Screenshots
+
+![Main Interface](./screenshot/main.png)
+
+![Controls Panel](./screenshot/control.png)
+
+![Command Panel](./screenshot/command.png)
+
+![FileManager](./screenshot/files.png)
 
 ### Custom Configuration
 
@@ -130,7 +139,7 @@ The AI can request these commands:
 
 - DeepSeek: Tested
 - Minimax: Tested
-- Other providers (OpenAI, Ollama, etc.): Not tested
+- Other providers (OpenAI, Ollama, etc.): Tested
 
 **Interfaces:**
 

@@ -63,14 +63,13 @@ class WebServer:
         # ---- Auth callback ----
 
         @self._app.post("/api/authorize-execute")
-        async def authorize_execute(authorized: str = Form(...), commands: str = Form(...)):
+        async def authorize_execute(authorized: str = Form(...)):
             try:
                 is_authorized = authorized.lower() == "true"
-                cmd_list = json.loads(commands) if commands else []
-                self._model.submit_web_auth(is_authorized, cmd_list)
+                self._model.submit_web_auth(is_authorized)
                 return JSONResponse({"success": True})
             except Exception as e:
-                self._model.submit_web_auth(False, [])
+                self._model.submit_web_auth(False)
                 return JSONResponse({"success": False, "error": str(e)})
 
         @self._app.post("/api/stop")
@@ -86,8 +85,8 @@ class WebServer:
                 auth_mode_val = int(mode)
                 self._controller.set_auth_mode(auth_mode_val)
                 return {"success": True, "auth_mode": self._controller.get_auth_mode()}
-            except ValueError:
-                return {"success": False, "error": "Invalid auth mode"}
+            except (ValueError, TypeError):
+                return {"success": False, "error": "Invalid auth mode (must be 0, 1, or 2)"}
 
         # ---- Session ----
 

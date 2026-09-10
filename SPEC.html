@@ -19,10 +19,7 @@
                     /n：不允许当前待执行指令执行。
                 </command>
                 <command>
-                    /y-all：自动允许后续所有指令执行（将授权模式设为1）。
-                </command>
-                <command>
-                    /n-all：后续指令执行需要申请授权（将授权模式设为0）。
+                    /auth 0|1|2：切换授权模式（0=No-Auto，1=Half-Auto，2=Full-Auto）。在授权提示中切换后，重新评估当前指令：新模式下不再需要授权则放行，否则继续等待输入。
                 </command>
                 <command>
                     /reset：重置会话，清除会话历史。
@@ -30,7 +27,7 @@
                 <flow>
                     1. 用户输入消息，调用Model模块处理。
                     2. Model模块调用LLM并返回结果，若结果中包含命令调用，进入授权流程。
-                    3. 若需要授权（auth_mode=0），Model模块在终端展示待执行命令，等待用户输入 /y、/n、/y-all、/n-all。
+                    3. 若当前授权模式下该指令需要授权，Model模块在终端展示待执行命令，等待用户输入 /y、/n、/auth 0|1|2。
                     4. 用户授权后，执行命令，结果反馈给LLM继续多轮对话。
                     5. 用户拒绝则将拒绝信息反馈给LLM，继续对话。
                     6. 当LLM返回中不含任何命令调用时，对话停止，等待用户输入。
@@ -45,12 +42,12 @@
                     支持文件管理功能
                 </function>
                 <function>
-                    支持指令授权模式修改，支持显示主题修改，支持会话重置
+                    支持指令授权模式修改（No-Auto/Half-Auto/Full-Auto），支持显示主题修改，支持会话重置
                 </function>
                 <flow>
                     1. 用户在Web界面输入消息，前端通过SSE流式连接调用Model模块。
                     2. Model模块以SSE事件流逐步推送：LLM回答片段(chunk) → 命令解析结果 → 授权请求(若需要)。
-                    3. 若需要授权，前端弹出授权弹窗，用户选择允许/拒绝/部分允许。
+                    3. 若当前授权模式下该指令需要授权，前端弹出授权弹窗，用户选择允许/拒绝。
                     4. 用户授权后，Model模块执行命令，推送执行结果事件。
                     5. 用户拒绝则推送拒绝事件，Model模块将拒绝信息反馈给LLM。
                     6. 当LLM返回中不含任何命令调用时，推送done事件，对话停止。
@@ -63,6 +60,9 @@
                 </event>
                 <event>
                     response_done：一轮LLM回答完成。附加字段：iteration, commands
+                </event>
+                <event>
+                    parse_error：LLM返回的命令JSON解析失败。附加字段：errors
                 </event>
                 <event>
                     auth_required：需要用户授权。附加字段：commands
@@ -83,6 +83,9 @@
                     error：发生错误。附加字段：error
                 </event>
                 <event>
+                    stopped：用户中止对话。附加字段：iteration
+                </event>
+                <event>
                     done：整个对话轮次结束。附加字段：iteration
                 </event>
             </web-mode>
@@ -91,13 +94,13 @@
             <controler>
                 <description>控制模块，配置信息加载维护，并控制整个Agent的运行。</description>
                 <point>启动时从config.json加载配置项，获取当前操作系统名称，注入到system_prompt的{system_name}占位符中</point>
-                <point>指令授权模式采用一个整型变量auth_mode进行保存，0为需要授权，1为自动授权，由控制模块维护，读取/修改需要加锁(threading.Lock)</point>
+                <point>指令授权模式采用一个整型变量auth_mode进行保存，0为需要授权，1为低风险指令自动授权（高风险指令需申请授权），2为自动授权，由控制模块维护，读取/修改需要加锁(threading.Lock)</point>
                 <point>授权模式修改为临时性修改，不视作配置修改，不进行持久化</point>
                 <point>auth_mode初始值从配置文件的auth_mode字段读取，若未配置则默认为0（需要授权）</point>
                 <point>会话重置(/reset)时，授权模式恢复为初始值</point>
                 <point>配置文件在CLI模式与Web模式下均不提供修改功能，也不支持持久化保存</point>
                 <point>控制模块开放一个授权查询接口get_auth_mode() -> int，供命令模块调用，以查询当前授权模式，读取时加锁</point>
-                <point>控制模块开放一个授权修改接口set_auth_mode(mode: int)，当Web模式修改认证模式，及命令行模式执行/y-all或/n-all修改认证模式时，由控制模块接受请求并修改认证模式，写入时加锁</point>
+                <point>控制模块开放一个授权修改接口set_auth_mode(mode: int)，当Web模式修改授权模式，及命令行模式执行/auth 0|1|2修改授权模式时，由控制模块接受请求并修改授权模式，写入时加锁；仅接受0/1/2，非法值拒绝</point>
                 <point>控制模块开放一个获取配置接口get_config() -> Config，返回当前配置对象的只读引用</point>
                 <point>控制模块开放一个重置授权接口reset_auth()，将授权模式恢复为配置文件中的初始值，加锁操作</point>
             </controler>
@@ -109,13 +112,13 @@
                 <point>当大模型尝试同时执行多个指令时，模型模块采用线性串行模式，逐个传入并调用命令模块，由命令模块逐个进行解析、获取授权及执行，每条指令的授权与执行结果独立处理</point>
                 <point>工具/指令执行完毕后，将结果返回给大模型，并自动进行下一轮对话</point>
                 <point>当大模型的返回中不含任何工具/指令调用时，对话停止并等待用户输入</point>
-                <point>受工具/指令调用所触发的多轮调用，轮数受配置文件中的round_limit值限制。仅当授权模式为自动授权(auth_mode=1)时该限制生效；需要授权(auth_mode=0)时不做轮数限制。到达限制值时自动停止对话</point>
-                <point>触发用户授权申请时，轮数计数清零。保证会话中途开启自动授权后，仍能以完整的round_limit轮次预算继续执行，而非因已累计轮数而立即停止</point>
+                <point>受工具/指令调用所触发的多轮调用，轮数受配置文件中的round_limit值限制，所有授权模式下均生效。到达限制值时自动停止对话</point>
+                <point>触发用户授权申请时，轮数计数立即清零。保证会话中途授权后，仍能以完整的round_limit轮次预算继续执行，而非因已累计轮数而立即停止</point>
                 <point>模型模块开放一个授权请求接口request_auth(commands: list) -> AuthResult，供命令模块调用，以向用户申请授权</point>
-                <point>CLI模式下授权请求在终端展示待执行命令列表，等待用户输入/y、/n、/y-all、/n-all</point>
+                <point>CLI模式下授权请求在终端展示待执行命令列表，等待用户输入/y、/n、/auth 0|1|2</point>
                 <point>Web模式下授权请求通过SSE推送auth_required事件，等待前端通过/api/authorize-execute接口返回授权结果</point>
                 <cli-vs-web>
-                    CLI模式：同步阻塞调用，直接返回完整结果ChatResult。可使用流式或非流式LLM调用，直接打印到终端。授权交互通过终端输入/y、/n、/y-all、/n-all。结果展示直接终端打印。错误在终端打印。
+                    CLI模式：同步阻塞调用，直接返回完整结果ChatResult。可使用流式或非流式LLM调用，直接打印到终端。授权交互通过终端输入/y、/n、/auth 0|1|2。结果展示直接终端打印。错误在终端打印。
                 </cli-vs-web>
                 <cli-vs-web>
                     Web模式：SSE流式输出，分步推送事件。必须使用流式LLM调用，逐chunk推送。授权交互通过前端弹窗确认，通过API返回结果。结果展示通过SSE事件推送至前端渲染。错误在对话窗口中显示，样式同指令执行结果。
@@ -143,7 +146,8 @@
                 <description>命令模块，负责解析指令，并返回结果。</description>
                 <point>收到指令后，进行解析</point>
                 <point>调用控制模块的授权查询接口get_auth_mode()，以查询当前授权模式</point>
-                <point>根据授权模式，判断是否需要授权：auth_mode=0需要授权，auth_mode=1自动授权</point>
+                <point>根据授权模式与指令风险等级，判断是否需要授权：auth_mode=0时所有指令需要授权；auth_mode=1时低风险指令免授权、高风险指令需要授权；auth_mode=2时所有指令免授权</point>
+                <point>风险等级划分：低风险指令为读取/列出类（list_dir、read_file）；高风险指令为新建/删除/编辑修改/执行shell类（make_dir、delete_dir、rename_dir、write_file、delete_file、edit_file、rename_file、exec_cmd）</point>
                 <point>如果需要授权，则调用模型模块的授权请求接口request_auth()，以向用户申请授权</point>
                 <point>如果用户授权，则执行指令，将结果返回给模型模块，并继续对话</point>
                 <point>如果用户拒绝，则将用户拒绝的信息返回给模型模块，由模型模块反馈给LLM继续对话</point>
@@ -224,7 +228,7 @@
             <field>model：string，默认"llama3.2"，模型名称</field>
             <field>round_limit：int，默认20，多轮对话最大轮次</field>
             <field>cmd_timeout：int，默认60，命令执行超时时间（秒），新增字段</field>
-            <field>auth_mode：int，默认0，初始授权模式：0=需要授权，1=自动授权，新增字段</field>
+            <field>auth_mode：int，默认0，初始授权模式：0=No-Auto(所有指令需授权)，1=Half-Auto(低风险指令自动授权，高风险指令需授权)，2=Full-Auto(所有指令自动授权)，新增字段</field>
             <field>system_prompt：string，内置默认值，系统提示词，支持{system_name}占位符</field>
             <field>listen_host：string，默认"127.0.0.1"，Web模式监听地址</field>
             <field>listen_port：int，默认8880，Web模式监听端口</field>
@@ -243,8 +247,9 @@
             <point>黑名单模式列表仅保留：rm -rf /</point>
             <point>匹配规则：命令字符串中包含黑名单模式即为拦截（不区分大小写）</point>
             <point>当auth_mode=0时，所有命令执行前需经用户授权</point>
-            <point>用户可通过/y-all(CLI)或Web界面切换为auth_mode=1（自动授权）</point>
-            <point>用户可通过/n-all(CLI)或Web界面切换为auth_mode=0（需要授权）</point>
+            <point>当auth_mode=1时，低风险命令（读取/列出）自动执行，高风险命令（新建/删除/编辑修改/执行shell等）执行前需经用户授权</point>
+            <point>当auth_mode=2时，所有命令自动执行，无需授权</point>
+            <point>用户可通过/auth 0|1|2(CLI)或Web界面的分段滑块切换授权模式</point>
         </safety>
     </implementation>
 </project>

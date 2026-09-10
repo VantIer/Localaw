@@ -6,10 +6,10 @@
 
 - 连接 OpenAI 兼容的 LLM API（Ollama、vLLM 等）
 - 根据 AI 响应在本地系统执行命令
-- 授权模式：每次询问或会话授权
+- 授权模式：No-Auto（auth_mode=0）、Half-Auto（auth_mode=1）、Full-Auto（auth_mode=2）
 - CLI 和 Web 界面
 - 文件操作和命令执行
-- 多轮对话：AI 可根据执行结果自动继续执行（自动授权模式下最多 20 轮；需要授权时不限制轮数）
+- 多轮对话：AI 可根据执行结果自动继续执行（所有模式下均受 `round_limit` 限制；每次触发授权申请时轮数计数器清零）
 - Web 界面：FileManager 文件管理器、Command 命令执行面板
 
 ## 安装
@@ -41,7 +41,11 @@ pip install -r requirements.txt
 - `api_base`：LLM API 地址
 - `api_key`：API 密钥
 - `model`：模型名称
-- `round_limit`：多轮对话最大轮数，默认 20。仅在自动授权模式（auth_mode=1）下生效；需要授权模式（auth_mode=0）下不限制轮数
+- `round_limit`：多轮对话最大轮数，默认 20。所有模式下均生效；每次触发授权申请时轮数计数器清零
+- `auth_mode`：授权模式，默认 0
+  - `0` = No-Auto：所有指令执行前都需授权
+  - `1` = Half-Auto：低风险指令（读取/列出）自动授权；高风险指令（新建/删除/编辑修改/执行 shell 等）需申请授权
+  - `2` = Full-Auto：所有指令自动授权
 - `listen_host`：Web 服务监听地址
 - `listen_port`：Web 服务监听端口
 
@@ -65,7 +69,7 @@ python -m src.main --mode web --config PATH_TO_CONFIG_FILE
 
 ### Web 界面功能
 
-- **Controls 控制面板**：主题切换、授权模式设置、会话重置
+- **Controls 控制面板**：主题切换、授权模式切换（N-Auto / H-Auto / F-Auto）、会话重置
 - **Command 命令面板**：直接输入 shell 命令执行
 - **FileManager 文件管理器**：
   - 浏览目录（单击选中，双击进入目录）
@@ -75,10 +79,15 @@ python -m src.main --mode web --config PATH_TO_CONFIG_FILE
 
 点击标题栏右侧按钮可打开对应面板，同时只能打开一个面板。
 
-![主界面](./Docs/web_main.png)
-![Controls 面板](./Docs/web_ctrl.png)
-![Command 面板](./Docs/web_cmd.png)
-![FileManager](./Docs/web_file.png)
+### 界面截图
+
+![主界面](./screenshot/main.png)
+
+![Controls 面板](./screenshot/control.png)
+
+![Command 面板](./screenshot/command.png)
+
+![FileManager](./screenshot/files.png)
 
 ### 自定义配置
 
@@ -130,7 +139,7 @@ AI 可以请求执行以下命令：
 
 - DeepSeek：已测试
 - Minimax：已测试
-- 其他提供商（OpenAI、Ollama 等）：未测试
+- 其他提供商（OpenAI、Ollama 等）：已测试
 
 **界面：**
 
