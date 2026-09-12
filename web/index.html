@@ -16,7 +16,6 @@
             --text-muted: #6b7280;
             --text-faint: #98a0b3;
             --primary: #4f46e5;
-            --primary-hover: #4338ca;
             --primary-soft: rgba(79, 70, 229, 0.1);
             --gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
             --danger: #ef4444;
@@ -48,7 +47,6 @@
             --text-muted: #9aa3b4;
             --text-faint: #6f7889;
             --primary: #6366f1;
-            --primary-hover: #818cf8;
             --primary-soft: rgba(99, 102, 241, 0.16);
             --gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
             --danger: #ef4444;
@@ -1523,7 +1521,6 @@
         });
 
         document.getElementById('modalDeny').addEventListener('click', async () => {
-            addMessage('Command execution denied by user.', 'system');
             await submitAuth(false);
         });
 
@@ -1673,8 +1670,6 @@
                 data.items.forEach(item => {
                     const div = document.createElement('div');
                     div.className = 'files-item';
-                    div.dataset.name = item.name;
-                    div.dataset.isDir = item.is_dir;
                     const iconColor = item.is_dir ? 'var(--warning)' : 'var(--text-muted)';
                     const itemType = item.is_dir ? 'DIR' : 'FILE';
                     div.innerHTML = `

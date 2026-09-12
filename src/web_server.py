@@ -26,7 +26,6 @@ class WebServer:
         self._file_module = FileModule()
         self._command = CommandModule(self._controller, self._file_module)
         self._model = ModelModule(self._controller, self._command, mode="web")
-        self._command.set_model(self._model)
         self._current_path = Path.cwd()
 
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -104,6 +103,8 @@ class WebServer:
         @self._app.post("/api/exec-cmd")
         async def exec_cmd(command: str = Form(...)):
             try:
+                if not self._model.check_safety(command):
+                    return JSONResponse({"result": "Error: Command blocked due to safety concerns", "error": None})
                 result = self._command.execute("exec_cmd", {"command": command})
                 return JSONResponse({"result": result, "error": None})
             except Exception as e:

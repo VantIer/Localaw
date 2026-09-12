@@ -1,6 +1,5 @@
 import platform
 import subprocess
-from typing import List
 
 from src.file import FileModule
 
@@ -29,15 +28,9 @@ class CommandModule:
 
     HIGH_RISK_ACTIONS = (FILE_ACTIONS | {"exec_cmd"}) - LOW_RISK_ACTIONS
 
-    FORBIDDEN_PATTERNS = ["rm -rf /"]
-
     def __init__(self, controller, file_module: FileModule):
         self._controller = controller
         self._file_module = file_module
-        self._model = None
-
-    def set_model(self, model):
-        self._model = model
 
     @staticmethod
     def _to_int(value, default=0):
@@ -48,54 +41,10 @@ class CommandModule:
         except (TypeError, ValueError):
             return default
 
-    def check_safety(self, cmd: str) -> bool:
-        cmd_lower = cmd.lower()
-        for pattern in self.FORBIDDEN_PATTERNS:
-            if pattern.lower() in cmd_lower:
-                return False
-        return True
-
     def is_high_risk(self, action: str) -> bool:
         return action in self.HIGH_RISK_ACTIONS
 
-    def requires_auth(self, action: str) -> bool:
-        """根据当前授权模式与指令风险等级判断是否需要申请授权。
-        0=需要授权，1=低风险自动授权(高风险需授权)，2=自动授权"""
-        mode = self._controller.get_auth_mode()
-        if mode == 0:
-            return True
-        if mode == 1:
-            return self.is_high_risk(action)
-        return False
-
-    def parse_and_execute(self, commands: list) -> List[ExecutionResult]:
-        results = []
-        for cmd in commands:
-            action = cmd.get("action")
-            params = {k: v for k, v in cmd.items() if k != "action"}
-
-            if action == "exec_cmd" and not self.check_safety(params.get("command", "")):
-                results.append(ExecutionResult(
-                    action, params, "Error: Command blocked due to safety concerns"
-                ))
-                continue
-
-            if self.requires_auth(action):
-                auth_result = self._model.request_auth([cmd])
-                if not auth_result.authorized:
-                    results.append(ExecutionResult(
-                        action, params, "Error: User denied command execution"
-                    ))
-                    continue
-
-            result = self._execute_action(action, params)
-            results.append(ExecutionResult(action, params, result))
-
-        return results
-
     def execute(self, action: str, params: dict) -> str:
-        if action == "exec_cmd" and not self.check_safety(params.get("command", "")):
-            return "Error: Command blocked due to safety concerns"
         return self._execute_action(action, params)
 
     def _execute_action(self, action: str, params: dict) -> str:

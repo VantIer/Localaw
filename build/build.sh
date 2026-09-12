@@ -15,7 +15,7 @@ if [ ! -d "build" ]; then
 fi
 
 # Install pyinstaller if not installed
-if ! python3 -c "import pyinstaller" &> /dev/null; then
+if ! python3 -c "import PyInstaller" &> /dev/null; then
     echo "Installing pyinstaller..."
     pip install pyinstaller
 fi

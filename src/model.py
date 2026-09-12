@@ -19,6 +19,8 @@ class AuthResult:
 
 
 class ModelModule:
+    FORBIDDEN_PATTERNS = ["rm -rf /"]
+
     def __init__(self, controller, command_module, mode="cli"):
         self._controller = controller
         self._command = command_module
@@ -30,9 +32,6 @@ class ModelModule:
         # Web auth callback state
         self._web_auth_event: Optional[threading.Event] = None
         self._web_auth_result: Optional[AuthResult] = None
-
-        # CLI auth request flag (round counter reset on authorization trigger)
-        self._auth_was_requested = False
 
         # Stop request state
         self._stop_lock = threading.Lock()
@@ -86,18 +85,43 @@ class ModelModule:
                         return ChatResult(response=last_response)
                     continue
 
-                # Process commands serially via Command module
-                results = self._command.parse_and_execute(parsed_commands)
+                # Process commands serially
+                all_results = []
+                user_denied = False
 
-                if self._auth_was_requested:
-                    # 授权申请触发时清零轮数，保证中途开启自动授权后仍有完整轮次预算
-                    self._auth_was_requested = False
-                    iteration = 0
+                for cmd in parsed_commands:
+                    action = cmd.get("action")
+                    params = {k: v for k, v in cmd.items() if k != "action"}
 
-                result_text = "\n".join([self._format_result(r) for r in results])
+                    # Safety check
+                    if action == "exec_cmd" and not self.check_safety(params.get("command", "")):
+                        all_results.append(ExecutionResult(
+                            action, params, "Error: Command blocked due to safety concerns"
+                        ))
+                        continue
+
+                    # Auth check
+                    if self._requires_auth(action):
+                        # 授权申请触发时清零轮数，保证中途开启自动授权后仍有完整轮次预算
+                        iteration = 0
+                        auth_result = self.request_auth([cmd])
+                        if not auth_result.authorized:
+                            all_results.append(ExecutionResult(
+                                action, params, "Error: User denied command execution"
+                            ))
+                            user_denied = True
+                            break
+
+                    result_str = self._command.execute(action, params)
+                    all_results.append(ExecutionResult(action, params, result_str))
+
+                result_text = "\n".join([self._format_result(r) for r in all_results])
                 self._conversation_history.append(
                     {"role": "user", "content": f"Command execution result:\n{result_text}"}
                 )
+
+                if user_denied:
+                    break
 
             except Exception as e:
                 return ChatResult(error=str(e), response=last_response)
@@ -181,14 +205,14 @@ class ModelModule:
                     params = {k: v for k, v in cmd.items() if k != "action"}
 
                     # Safety check
-                    if action == "exec_cmd" and not self._command.check_safety(params.get("command", "")):
+                    if action == "exec_cmd" and not self.check_safety(params.get("command", "")):
                         result = ExecutionResult(action, params, "Error: Command blocked due to safety concerns")
                         all_results.append(result)
                         yield {"type": "execution_done", "results": [result.to_dict()]}
                         continue
 
                     # Auth check
-                    if self._command.requires_auth(action):
+                    if self._requires_auth(action):
                         # 授权申请触发时清零轮数（仅影响 round_limit 循环计数）
                         iteration = 0
                         yield {"type": "auth_required", "commands": [cmd]}
@@ -248,7 +272,6 @@ class ModelModule:
         return AuthResult(authorized=False)
 
     def _request_auth_cli(self, commands: list) -> AuthResult:
-        self._auth_was_requested = True
         print("\n" + "=" * 50)
         print("Commands detected:")
         for cmd in commands:
@@ -280,7 +303,7 @@ class ModelModule:
                 if len(parts) == 2 and parts[1] in ("0", "1", "2"):
                     self._controller.set_auth_mode(int(parts[1]))
                     if not any(
-                        self._command.requires_auth(c.get("action")) for c in commands
+                        self._requires_auth(c.get("action")) for c in commands
                     ):
                         return AuthResult(authorized=True)
                     print(
@@ -322,6 +345,26 @@ class ModelModule:
     def _set_stop(self, requested: bool):
         with self._stop_lock:
             self._stop_requested = requested
+
+    # ----------------------------------------------------------------
+    # Command analysis
+    # ----------------------------------------------------------------
+    def check_safety(self, cmd: str) -> bool:
+        cmd_lower = cmd.lower()
+        for pattern in self.FORBIDDEN_PATTERNS:
+            if pattern.lower() in cmd_lower:
+                return False
+        return True
+
+    def _requires_auth(self, action: str) -> bool:
+        """根据当前授权模式与指令风险等级判断是否需要申请授权。
+        0=需要授权，1=低风险自动授权(高风险需授权)，2=自动授权"""
+        mode = self._controller.get_auth_mode()
+        if mode == 0:
+            return True
+        if mode == 1:
+            return self._command.is_high_risk(action)
+        return False
 
     # ----------------------------------------------------------------
     # Common helpers
