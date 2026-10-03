@@ -1,0 +1,7 @@
+# Build output
+/bin/
+/dist/
+
+# Editor / OS
+.DS_Store
+Thumbs.db

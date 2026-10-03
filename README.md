@@ -1,147 +1,437 @@
 # Localaw
 
-A local AI assistant that connects to remote LLM APIs and executes commands on your system.
+**中文** | [English](#english)
 
-[中文文档](./README_zh.md)
+一个由 Go 编写的**纯本地 AI Agent**：连接 OpenAI 兼容的大模型 API（原生 Tool/Function Calling），
+把模型的意图作为标准工具调用在**本机**执行，并把结果回灌模型续轮。
 
-## Features
+> 本项目是对原 Python 版 Localaw 的 Go 重构：指令调用从「提示词 → JSON 解析 → 执行」重写为
+> **标准 Tool Calling** 流程；新增**多会话**；CLI 与 Web 交互参考 C2Agent 设计，界面基于原 Localaw 前端。
 
-- Connect to OpenAI-compatible LLM APIs (Ollama, vLLM, etc.)
-- Execute commands on local system based on AI responses
-- Authorization modes: No-Auto (auth_mode=0), Half-Auto (auth_mode=1), Full-Auto (auth_mode=2)
-- CLI and Web interface
-- File operations and command execution
-- Multi-turn conversation: AI can continue executing based on results (bounded by `round_limit` in all modes; the counter resets whenever an authorization request is triggered)
-- Web interface: FileManager, Command panel
+![Localaw 主界面](./screenshot/main.png)
 
-## Setup
+---
+
+## 1. 特性
+
+- **原生工具调用**：使用官方库 `github.com/openai/openai-go`，兼容任意 OpenAI 兼容端点（Ollama / vLLM / DeepSeek / OpenAI）。
+- **多会话**：可同时存在多个彼此独立的会话（各自历史、轮数、授权、停止），会话在后台运行，页面刷新/断线不中断。
+- **线性指令队列**：所有动作（LLM 工具调用与操作员直连命令）经**单条 FIFO 队列**串行执行；
+  **排队等待不超时，执行中受 `cmd_timeout` 限制**，超时终止**整个进程树**。
+- **三级授权**：`0` N-Auto（全部需授权）、`1` H-Auto（低风险自动）、`2` F-Auto（全部自动）；
+  授权通过会重置本轮轮数预算；拒绝则**不下发**该动作并结束本轮。
+- **超时即失败**：执行超时终止进程树并将错误回灌模型（无断连语义，因为是本地执行）。
+- **CLI + Web**：CLI 交互；Web 面板含会话列表、流式对话、授权弹窗、文件管理器、命令面板、授权模式滑块、深浅主题。
+- **纯 Go、无 CGO**：可交叉编译 Windows / Linux / macOS 单文件二进制；前端以 `go:embed` 内嵌。
+
+---
+
+## 2. 架构
+
+```
+                    Localaw（Go 单进程）
+  ┌──────────────────────────────────────────────────────────┐
+  │   CLI              Web（net/http + SSE + go:embed 单页）   │
+  │        └──────────────────┬───────────────────┘          │
+  │                     Engine（多会话 / 授权 / 轮数 / 事件广播）│
+  │                           │                              │
+  │                    线性指令队列（单条 FIFO dispatcher）     │
+  │                           │                              │
+  │                    Executor（本机执行）                    │
+  │        ┌──────────────────┴──────────────────┐           │
+  │   FileModule（文件操作）                 exec_cmd（Shell）  │
+  └──────────────────────────────────────────────────────────┘
+                           │
+                   本机文件系统 / Shell
+```
+
+**一次工具调用的数据流**：用户消息 → 该会话 goroutine → LLM（带 tools）→ 返回 `tool_calls`
+→ 安全检查 → 授权判定 → 封装 Job 入队列（排队不超时）→ dispatcher 执行（受 `cmd_timeout`）
+→ 结果写回本会话（`role=tool`）→ 回灌续轮（受 `round_limit`）。
+
+---
+
+## 3. 目录结构
+
+```
+LocalawX/
+├── go.mod / go.sum
+├── config.example.json
+├── README.md / design.md
+├── cmd/localaw/main.go            # 入口：--mode cli|web --config
+├── internal/
+│   ├── config/                    # 分层配置加载/校验/默认值
+│   ├── command/                   # 工具动作表（名称/参数/风险/安全/工具 schema 来源）
+│   ├── llm/                       # openai-go 客户端 + tools schema
+│   ├── local/                     # 本机执行层：file / exec / 线性队列
+│   │   ├── file.go
+│   │   ├── executor.go
+│   │   ├── queue.go
+│   │   ├── proc_windows.go / proc_unix.go
+│   ├── engine/                    # 多会话编排、授权、轮数、事件
+│   │   ├── engine.go / session.go / events.go
+│   ├── web/                       # net/http API + SSE + 内嵌前端
+│   │   ├── server.go
+│   │   └── ui/index.html
+│   └── cli/cli.go                 # 交互式命令行
+└── build/                         # 交叉编译脚本（build.bat / build.sh）
+```
+
+---
+
+## 4. 环境要求
+
+- Go **1.22+**（纯 Go，无需 CGO）。
+- 网络：能访问配置的 LLM API。
+
+## 5. 第三方依赖（Go）
+
+| 模块 | 版本 | 说明 |
+| ---- | ---- | ---- |
+| `github.com/openai/openai-go` | v1.12.0 | OpenAI 兼容 API 客户端（流式 chat completions + tools） |
+| `github.com/tidwall/{gjson,sjson,match,pretty}` | 间接 | 上游依赖 |
+
+> 全部为纯 Go，不引入 CGO。
+
+---
+
+## 6. 编译
 
 ```bash
-pip install -r requirements.txt
+# 本机
+go build -o bin/localaw ./cmd/localaw
+
+# 交叉编译（纯 Go，CGO_ENABLED=0）
+build\build.bat        # Windows
+./build/build.sh       # bash
 ```
 
-## Configuration
+产物在 `dist/`：
 
-Edit `config.json`:
+| 目标 | 产物 |
+| ---- | ---- |
+| win x86-64 | `dist/localaw_windows_amd64.exe` |
+| win x86 (32) | `dist/localaw_windows_386.exe` |
+| linux amd64 | `dist/localaw_linux_amd64` |
+| linux x86 (32) | `dist/localaw_linux_386` |
+| linux arm64 | `dist/localaw_linux_arm64` |
 
-```json
-{
-    "api_base": "http://localhost:11434/v1",
-    "api_key": "ollama",
-    "model": "llama3.2",
-    "round_limit": 20,
-    "cmd_timeout": 60,
-    "auth_mode": 0,
-    "system_prompt": "You are a local AI assistant with the ability to execute commands on the user's local system.\n\nCURRENT OPERATING SYSTEM: {system_name}\n\nYou have access to the following commands:\n\n1. list_dir: List directory contents\n   - params: path (optional, default: current directory)\n\n2. read_file: Read file contents\n   - params: path (required), start_line (optional, from 1, 0 or empty means whole file), end_line (optional)\n   - example: {\"action\": \"read_file\", \"path\": \"file.txt\", \"start_line\": 1, \"end_line\": 10}\n\n3. delete_file: Delete files or directories\n   - params: path (required)\n\n4. write_file: Write content to a file\n   - params: path (required), content (required)\n\n5. exec_cmd: Execute shell commands\n   - params: command (required)\n\n6. make_dir: Create a directory\n   - params: path (required, including path)\n   - example: {\"action\": \"make_dir\", \"path\": \"dir/new_folder\"}\n\n7. delete_dir: Delete a directory\n   - params: path (required, including path)\n\n8. rename_dir: Rename a directory\n   - params: path (required, including path), new_name (required, directory name only)\n   - example: {\"action\": \"rename_dir\", \"path\": \"dir/old_name\", \"new_name\": \"new_name\"}\n\n9. edit_file: Edit file content (add, delete, or modify lines)\n   - params: path (required), operation (required: add/del/modify), start_line (required), end_line (required for del/modify), content (required for add/modify)\n   - operation \"add\": Insert content at start_line position\n   - operation \"del\": Delete lines from start_line to end_line (inclusive)\n   - operation \"modify\": Delete lines from start_line to end_line (inclusive), then insert content at start_line position\n   - example: {\"action\": \"edit_file\", \"path\": \"file.txt\", \"operation\": \"add\", \"start_line\": 5, \"end_line\": 0, \"content\": \"new line\"}\n   - example: {\"action\": \"edit_file\", \"path\": \"file.txt\", \"operation\": \"del\", \"start_line\": 3, \"end_line\": 5}\n   - example: {\"action\": \"edit_file\", \"path\": \"file.txt\", \"operation\": \"modify\", \"start_line\": 1, \"end_line\": 3, \"content\": \"replacement\"}\n\n10. rename_file: Rename a file\n    - params: path (required, including path), new_name (required, file name only)\n    - example: {\"action\": \"rename_file\", \"path\": \"dir/old.txt\", \"new_name\": \"new.txt\"}\n\nSTRICT EXECUTION RULES - YOUR BEHAVIOR DEPENDS ON FOLLOWING THESE:\n\n1. ONE COMMAND AT A TIME - ALWAYS\n   - You MUST only produce ONE JSON command block in your response\n   - NEVER send multiple commands in a single response\n   - NEVER include more than one ```json code block per response\n\n2. WAIT FOR RESULT BEFORE NEXT\n   - After sending ONE command, you MUST wait for the execution result\n   - Only after receiving the result, you may send the next command\n   - Do not speculate about command results\n\n3. COMMAND RESULT HANDLING\n   - When you receive a command result, acknowledge it briefly\n   - If more work is needed, send the next single command\n   - If the task is complete, respond normally in plain text\n\n4. USER DENIAL\n   - If the user denies a command, you will receive: \"User denied command execution\"\n   - When you receive this message, acknowledge the denial and respond in plain text\n   - Do NOT retry the denied command\n   - Ask if the user wants to do something else instead\n\nCONTENT RULES:\n- NEVER respond with JSON code blocks unless you are submitting a command for execution\n- For normal conversation, questions, or displaying information, ALWAYS use plain text only\n- Do NOT use JSON blocks for examples, demonstrations, explanations, or any other purpose\n\nCOMMAND SUBMISSION:\nWhen you need to execute a command:\n```json\n{\"action\": \"list_dir\", \"path\": \".\"}\n```\n\nOr:\n```json\n{\"action\": \"read_file\", \"path\": \"filename.txt\", \"start_line\": 1, \"end_line\": 20}\n```\n\nOr:\n```json\n{\"action\": \"exec_cmd\", \"command\": \"dir\"}\n```\n\nAlways respond in the same language as the user's query.",
-    "listen_host": "127.0.0.1",
-    "listen_port": 8880
-}
-```
+---
 
-**Configuration options:**
-
-- `api_base`: LLM API address
-- `api_key`: API key
-- `model`: Model name
-- `round_limit`: Max conversation rounds (default: 20). Applies in all modes; the counter resets whenever an authorization request is triggered
-- `auth_mode`: Authorization mode (default: 0)
-  - `0` = No-Auto: every command requires authorization
-  - `1` = Half-Auto: low-risk commands (read/list) are auto-authorized; high-risk commands (create/delete/edit/execute shell, etc.) require authorization
-  - `2` = Full-Auto: all commands are auto-authorized
-- `listen_host`: Web server listen address
-- `listen_port`: Web server listen port
-
-## Usage
-
-### CLI Mode
+## 7. 运行
 
 ```bash
-python -m src.main
-# or
-python -m src.main --mode cli --config PATH_TO_CONFIG_FILE
+cp config.example.json config.json    # 填写 llm.api_base / api_key / model
+
+# CLI（默认模式）
+./bin/localaw --config config.json
+# Web 面板：浏览器打开 http://127.0.0.1:8880
+./bin/localaw --mode web --config config.json
 ```
 
-### Web Mode
+### 配置（`config.json`）
+
+| 分区 | 字段 | 说明 |
+| ---- | ---- | ---- |
+| `llm` | `api_base` / `api_key` / `model` / `temperature` / `stream` / `system_prompt` | LLM 接口；`system_prompt` 中 `{system_name}` 替换为本机 OS |
+| `web` | `listen_host` / `listen_port` | Web 面板监听（默认 `127.0.0.1:8880`） |
+| `policy` | `auth_mode` / `round_limit` / `cmd_timeout` / `max_sessions` / `queue_capacity` | 授权模式、轮数、执行超时、会话上限、队列容量 |
+
+---
+
+## 8. CLI 命令
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `/sessions` | 列出会话 |
+| `/new [title]` | 新建会话 |
+| `/use <id\|index>` | 切换活动会话 |
+| `/close <id>` | 关闭会话 |
+| `/auth [0\|1\|2]` | 查看/切换授权模式（切换后即时重评估当前待授权动作） |
+| `/reset` | 重置活动会话 |
+| `/exec <command>` | 直接执行 shell 命令 |
+| `/help` / `/quit` | 帮助 / 退出 |
+
+授权提示下输入：`/y` 允许、`/n` 拒绝、`/auth 0|1|2` 切换模式后重新评估。
+
+---
+
+## 9. Web 面板
+
+- 顶栏：Sessions（会话列表）、Command（直连命令）、FileManager（文件管理）、Controls（主题/授权/重置）。
+- 左侧 Sessions 抽屉：新建 / 切换 / 关闭会话，运行中显示状态。
+- 聊天区：SSE 流式输出、工具结果块、授权弹窗、停止。
+- 文件管理器：真实绝对路径、进入目录、新建/删除/复制/移动、上传/下载（全部本机直连读写）。
+
+主要接口：`/api/config`、`/api/sessions*`、`/api/history`、`/api/send`、`/api/chat-stream`(SSE)、
+`/api/set-auth`、`/api/authorize-execute`、`/api/stop`、`/api/reset`、`/api/exec-cmd`、`/api/files/*`。
+
+### 界面截图
+
+**主界面**——顶栏为 Sessions / Command / FileManager / Controls 四个入口，中央为流式对话区。
+
+![主界面](./screenshot/main.png)
+
+**多会话**——左侧 Sessions 抽屉可新建 / 切换 / 关闭会话，并显示会话状态（IDLE / running）。
+
+![多会话](./screenshot/sessions.png)
+
+**Controls**——切换深浅主题、授权模式（N-Auto / H-Auto / F-Auto）、重置当前会话。
+
+![Controls 面板](./screenshot/controls.png)
+
+**Command**——直接输入 shell 命令并在本机执行（操作员直连，不经授权约束）。
+
+![Command 面板](./screenshot/cmd.png)
+
+**FileManager**——真实绝对路径浏览，新建 / 复制 / 移动 / 删除、上传 / 下载。
+
+![FileManager](./screenshot/filemanager.png)
+
+---
+
+## 10. 支持的工具
+
+`get_cwd`、`list_dir`、`read_file`、`write_file`、`create_file`、`delete_file`、`delete_dir`、
+`make_dir`、`rename_file`、`rename_dir`、`edit_file`、`copy`、`move`、`exec_cmd`。
+
+- 低风险：`get_cwd`、`list_dir`、`read_file`；其余为高风险。
+- 安全检查（仅 `exec_cmd`）：拦截 `rm` 命中根/`*`、`format c:`、`mkfs.`、`dd if=/dev/zero`。
+
+---
+
+## 11. 授权、轮数与队列
+
+- **授权模式**：`0` N-Auto 全部需授权；`1` H-Auto 低风险自动、其余需授权；`2` F-Auto 全部自动。
+- **轮数**：`round_limit` 限制单轮「LLM→动作→回灌」次数；**授权通过时清零**（拒绝不清零），任何模式都生效。
+- **拒绝语义**：被拒动作**绝不下发**，作为 tool 结果回灌后**结束本轮**。
+- **指令队列**：单条 FIFO；**排队等待无超时**，**执行中受 `cmd_timeout`**，超时终止进程树并作为 tool 错误回灌。
+
+---
+
+## 12. 测试
 
 ```bash
-python -m src.main --mode web --config PATH_TO_CONFIG_FILE
+go test ./...
+go vet ./...
 ```
 
-Then open http://127.0.0.1:8880 in your browser.
+覆盖：工具表与授权/安全检查、文件操作、队列串行与超时终止、引擎工具调用与授权拒绝语义。
 
-### Web Interface Features
+---
 
-- **Controls panel**: Theme toggle, auth mode switch (N-Auto / H-Auto / F-Auto), conversation reset
-- **Command panel**: Execute shell commands directly
-- **FileManager**:
-  - Browse directories (click to select, double-click to enter)
-  - Refresh, create new files, create new directories
-  - Copy, move, delete files/directories
-  - Upload and download files
+## 13. 安全与免责
 
-Click the buttons on the right side of the header to open panels. Only one panel can be open at a time.
+- 本工具在**本机**执行模型生成的命令与文件操作；授权模式与安全检查可降低风险，但**非生产级防护**。
+- 为个人 / 受信环境使用；Web 面板默认仅监听 `127.0.0.1`。
+- 操作员在 CLI/Web 的直连命令与文件操作不经授权约束（操作员即授权方）。
+- **请勿在公开/生产环境部署。**
+
+---
+
+# English
+
+A **purely local AI agent** written in Go: it talks to an OpenAI-compatible LLM
+(native tool/function calling), runs the model's intents as standard tool calls on
+**this machine**, and feeds results back to the model for the next round.
+
+> A Go rewrite of the original Python Localaw: command invocation was moved from
+> "prompt → JSON parsing → execute" to a **standard Tool Calling** flow; **multi-session**
+> support was added; the CLI/Web interaction follows C2Agent, with the UI based on the
+> original Localaw front-end.
+
+![Localaw main interface](./screenshot/main.png)
+
+## 1. Features
+
+- **Native tool calling** via the official `github.com/openai/openai-go`; works with any OpenAI-compatible endpoint (Ollama / vLLM / DeepSeek / OpenAI).
+- **Multi-session** — several independent sessions (own history, rounds, authorization, stop); sessions run in the background and survive page refreshes/disconnects.
+- **Linear command queue** — every action (LLM tool calls and operator direct commands) runs serially on a **single FIFO queue**; **queue wait is unbounded, execution is bounded by `cmd_timeout`**, which terminates the **whole process tree**.
+- **Three-level authorization** — `0` N-Auto (all), `1` H-Auto (low-risk auto), `2` F-Auto (none); an approval resets the round budget; a denial **never dispatches** the action and ends the turn.
+- **Timeout = failure** — a timeout kills the process tree and feeds the error back to the model (no disconnect semantics, since execution is local).
+- **CLI + Web** — CLI interaction; a Web panel with session list, streaming chat, authorization popup, file manager, command panel, auth-mode slider and light/dark themes.
+- **Pure Go, no CGO** — cross-compiles to Windows / Linux / macOS single binaries; the front-end is embedded via `go:embed`.
+
+## 2. Architecture
+
+```
+                    Localaw (single Go process)
+  ┌──────────────────────────────────────────────────────────┐
+  │   CLI              Web (net/http + SSE + go:embed page)   │
+  │        └──────────────────┬───────────────────┘          │
+  │                     Engine (multi-session / auth / rounds │
+  │                             / event broadcast)            │
+  │                           │                              │
+  │              Linear command queue (one FIFO dispatcher)   │
+  │                           │                              │
+  │                    Executor (local execution)             │
+  │        ┌──────────────────┴──────────────────┐           │
+  │   FileModule (file ops)                 exec_cmd (shell)  │
+  └──────────────────────────────────────────────────────────┘
+                           │
+                   local filesystem / shell
+```
+
+**Data flow of one tool call**: user message → that session's goroutine → LLM (with tools)
+→ `tool_calls` → safety check → authorization decision → build a Job into the queue (wait
+unbounded) → dispatcher executes (bounded by `cmd_timeout`) → result written back to this
+session (`role=tool`) → fed back for the next round (bounded by `round_limit`).
+
+## 3. Repository layout
+
+```
+LocalawX/
+├── go.mod / go.sum
+├── config.example.json
+├── README.md / design.md
+├── cmd/localaw/main.go            # entry: --mode cli|web --config
+├── internal/
+│   ├── config/                    # layered config load/validate/defaults
+│   ├── command/                   # action table (name/params/risk/safety; tool schema source)
+│   ├── llm/                       # openai-go client + tools schema
+│   ├── local/                     # local execution: file / exec / linear queue
+│   │   ├── file.go
+│   │   ├── executor.go
+│   │   ├── queue.go
+│   │   ├── proc_windows.go / proc_unix.go
+│   ├── engine/                    # multi-session orchestration, auth, rounds, events
+│   │   ├── engine.go / session.go / events.go
+│   ├── web/                       # net/http API + SSE + embedded front-end
+│   │   ├── server.go
+│   │   └── ui/index.html
+│   └── cli/cli.go                 # interactive CLI
+└── build/                         # cross-compile scripts (build.bat / build.sh)
+```
+
+## 4. Requirements
+
+- Go **1.22+** (pure Go, no CGO).
+- Network access to the configured LLM API.
+
+## 5. Third-party dependencies (Go)
+
+| Module | Version | Notes |
+| ------ | ------- | ----- |
+| `github.com/openai/openai-go` | v1.12.0 | OpenAI-compatible client (streaming chat completions + tools) |
+| `github.com/tidwall/{gjson,sjson,match,pretty}` | indirect | upstream deps |
+
+> All are pure Go; no CGO.
+
+## 6. Build
+
+```bash
+# Native
+go build -o bin/localaw ./cmd/localaw
+
+# Cross-compile (pure Go, CGO_ENABLED=0)
+build\build.bat        # Windows
+./build/build.sh       # bash
+```
+
+Outputs land in `dist/`:
+
+| Target | Artifact |
+| ------ | -------- |
+| win x86-64 | `dist/localaw_windows_amd64.exe` |
+| win x86 (32) | `dist/localaw_windows_386.exe` |
+| linux amd64 | `dist/localaw_linux_amd64` |
+| linux x86 (32) | `dist/localaw_linux_386` |
+| linux arm64 | `dist/localaw_linux_arm64` |
+
+## 7. Run
+
+```bash
+cp config.example.json config.json    # fill in llm.api_base / api_key / model
+
+# CLI (default mode)
+./bin/localaw --config config.json
+# Web panel: open http://127.0.0.1:8880
+./bin/localaw --mode web --config config.json
+```
+
+### Configuration (`config.json`)
+
+| Section | Fields | Notes |
+| ------- | ------ | ----- |
+| `llm` | `api_base` / `api_key` / `model` / `temperature` / `stream` / `system_prompt` | LLM endpoint; `{system_name}` in `system_prompt` is replaced with the local OS |
+| `web` | `listen_host` / `listen_port` | Web panel listener (default `127.0.0.1:8880`) |
+| `policy` | `auth_mode` / `round_limit` / `cmd_timeout` / `max_sessions` / `queue_capacity` | auth mode, rounds, execution timeout, session cap, queue depth |
+
+## 8. CLI commands
+
+| Command | Description |
+| ------- | ----------- |
+| `/sessions` | list sessions |
+| `/new [title]` | create a session |
+| `/use <id\|index>` | switch the active session |
+| `/close <id>` | close a session |
+| `/auth [0\|1\|2]` | show/set authorization mode (switching re-evaluates the pending action immediately) |
+| `/reset` | reset the active session |
+| `/exec <command>` | run a shell command directly |
+| `/help` / `/quit` | help / exit |
+
+At an authorization prompt: `/y` allow, `/n` deny, `/auth 0|1|2` switch mode and re-evaluate.
+
+## 9. Web panel
+
+- Top bar: Sessions (session list), Command (direct shell), FileManager (file operations), Controls (theme/auth/reset).
+- Left Sessions drawer: create / switch / close sessions, with running state.
+- Chat area: SSE streaming, tool-result blocks, authorization popup, stop.
+- File manager: real absolute path, navigate, create/delete/copy/move, upload/download (all local direct I/O).
+
+Main endpoints: `/api/config`, `/api/sessions*`, `/api/history`, `/api/send`, `/api/chat-stream` (SSE),
+`/api/set-auth`, `/api/authorize-execute`, `/api/stop`, `/api/reset`, `/api/exec-cmd`, `/api/files/*`.
 
 ### Screenshots
 
-![Main Interface](./screenshot/main.png)
+**Main** — top bar with Sessions / Command / FileManager / Controls; a streaming chat area in the center.
 
-![Controls Panel](./screenshot/control.png)
+![Main](./screenshot/main.png)
 
-![Command Panel](./screenshot/command.png)
+**Sessions** — the left Sessions drawer: create / switch / close sessions with their state (IDLE / running).
 
-![FileManager](./screenshot/files.png)
+![Sessions](./screenshot/sessions.png)
 
-### Custom Configuration
+**Controls** — switch light/dark theme, authorization mode (N-Auto / H-Auto / F-Auto), and reset the active session.
+
+![Controls panel](./screenshot/controls.png)
+
+**Command** — run a shell command directly on the local machine (operator direct, not authorization-gated).
+
+![Command panel](./screenshot/cmd.png)
+
+**FileManager** — browse by real absolute path, create / copy / move / delete, upload / download.
+
+![FileManager](./screenshot/filemanager.png)
+
+## 10. Tools
+
+`get_cwd`, `list_dir`, `read_file`, `write_file`, `create_file`, `delete_file`, `delete_dir`,
+`make_dir`, `rename_file`, `rename_dir`, `edit_file`, `copy`, `move`, `exec_cmd`.
+
+- Low risk: `get_cwd`, `list_dir`, `read_file`; the rest are high risk.
+- Safety check (only for `exec_cmd`): blocks `rm` targeting root/`*`, `format c:`, `mkfs.`, `dd if=/dev/zero`.
+
+## 11. Authorization, rounds and the queue
+
+- **Auth modes**: `0` N-Auto (all need approval); `1` H-Auto (low-risk auto, rest need approval); `2` F-Auto (all auto).
+- **Rounds**: `round_limit` caps the "LLM → action → feedback" loop per turn; an **approval resets** it (a denial does not), in every mode.
+- **Denial semantics**: the denied action is **never dispatched**; it is fed back as a tool result and the **turn ends**.
+- **Command queue**: a single FIFO; **queue wait is unbounded**, **execution is bounded by `cmd_timeout`**, which kills the process tree and feeds the error back as a tool result.
+
+## 12. Tests
 
 ```bash
-# Python module
-python -m src.main --config /path/to/config.json
-
-# Packaged executable
-Localaw.exe --mode web --config D:\MyConfigs\localaw.json
+go test ./...
+go vet ./...
 ```
 
+Covers: action table, authorization/safety checks, file operations, queue serialization and
+timeout termination, engine tool-calling and denial semantics.
 
+## 13. Security & disclaimer
 
-## Supported Commands
-
-The AI can request these commands:
-
-- `list_dir` - List directory contents (params: path)
-- `make_dir` - Create directory (params: path)
-- `delete_dir` - Delete directory (params: path)
-- `rename_dir` - Rename directory (params: path, new_name)
-- `read_file` - Read file contents (params: path, start_line, end_line)
-- `write_file` - Write files (params: path, content)
-- `delete_file` - Delete files/directories (params: path)
-- `edit_file` - Edit file (params: path, operation, start_line, end_line, content)
-- `rename_file` - Rename file (params: path, new_name)
-- `exec_cmd` - Execute shell commands (params: command)
-
-## Disclaimer
-
-**This tool is intended for personal local use only.**
-
-- No authentication or security measures are implemented
-- No input sanitization or command filtering is performed
-- No remote access methods are provided or planned (except LAN web access)
-- **DO NOT deploy in public, commercial, or production environments**
-- If you deploy in such environments, you must understand what you are doing and take full responsibility for any issues
-
-## Testing Status
-
-**Platforms:**
-
-- Windows: Tested
-- Linux: Tested
-
-**AI Providers:**
-
-- DeepSeek: Tested
-- Minimax: Tested
-- Other providers (OpenAI, Ollama, etc.): Tested
-
-**Interfaces:**
-
-- Web Mode: Tested
-- CLI Mode: Tested
+- The tool executes model-generated commands and file operations on **this machine**; auth modes and safety checks reduce risk but are **not production-grade protection**.
+- For personal / trusted-environment use; the Web panel binds to `127.0.0.1` by default.
+- Operator direct commands and file operations from the CLI/Web are not constrained by authorization (the operator is the authorizer).
+- **Do not deploy in public/production environments.**

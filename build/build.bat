@@ -1,50 +1,25 @@
 @echo off
-echo ========================================
-echo Building Localaw Executable
-echo ========================================
-echo.
+REM Build Localaw for every supported target. Fully static, CGO disabled,
+REM zero external runtime dependencies. Requires Go 1.22+.
+setlocal
+cd /d "%~dp0.."
 
-REM Get script directory and go to project root
-set SCRIPT_DIR=%~dp0
-cd /d "%SCRIPT_DIR%.."
+set CGO_ENABLED=0
+set TAGS=netgo,osusergo
+set LDFLAGS=-s -w
+if not exist dist mkdir dist
 
-REM Create build directory if not exists
-if not exist "build" mkdir build
+call :build windows amd64 .exe
+call :build windows 386   .exe
+call :build linux   amd64
+call :build linux   386
+call :build linux   arm64
+goto :eof
 
-REM Install pyinstaller if not installed
-pip show pyinstaller >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Installing pyinstaller...
-    pip install pyinstaller
-)
-
-REM Build the executable
-echo Building...
-pyinstaller --onefile --name Localaw ^
-    --add-data "web;web" ^
-    --add-data "src;src" ^
-    --hidden-import uvicorn ^
-    --hidden-import fastapi ^
-    --hidden-import openai ^
-    --hidden-import httpx ^
-    --collect-all uvicorn ^
-    --collect-all fastapi ^
-    --collect-all openai ^
-    --console ^
-    src/main.py
-
-if %errorlevel% equ 0 (
-    echo.
-    echo ========================================
-    echo Build completed successfully!
-    echo Executable: dist\Localaw.exe
-    echo ========================================
-    move dist\Localaw.exe build\ >nul 2>&1
-    echo Executable moved to: build\Localaw.exe
-) else (
-    echo.
-    echo Build failed!
-)
-
-echo.
-pause
+:build
+set GOOS=%~1
+set GOARCH=%~2
+set EXT=%~3
+echo ^>^> localaw %GOOS%/%GOARCH%
+go build -trimpath -tags "%TAGS%" -ldflags "%LDFLAGS%" -o "dist\localaw_%GOOS%_%GOARCH%%EXT%" ./cmd/localaw || exit /b 1
+goto :eof

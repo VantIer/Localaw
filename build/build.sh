@@ -1,66 +1,23 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Build Localaw for every supported target. Fully static, CGO disabled,
+# zero external runtime dependencies. Requires Go 1.22+.
+set -euo pipefail
+cd "$(dirname "$0")/.."
 
-echo "========================================"
-echo "Building Localaw Executable for Linux"
-echo "========================================"
-echo
+export CGO_ENABLED=0
+TAGS="netgo,osusergo"
+LDFLAGS="-s -w"
+mkdir -p dist
 
-# Get script directory and go to project root
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR/.."
+build() {
+    local goos="$1" goarch="$2" ext="${3:-}"
+    echo ">> localaw ${goos}/${goarch}"
+    GOOS="$goos" GOARCH="$goarch" go build -trimpath -tags "$TAGS" -ldflags "$LDFLAGS" \
+        -o "dist/localaw_${goos}_${goarch}${ext}" ./cmd/localaw
+}
 
-# Create build directory if not exists
-if [ ! -d "build" ]; then
-    mkdir -p build
-fi
-
-# Install pyinstaller if not installed
-if ! python3 -c "import PyInstaller" &> /dev/null; then
-    echo "Installing pyinstaller..."
-    pip install pyinstaller
-fi
-
-# Check if virtual environment exists and activate if needed
-if [ -d "localawenv" ]; then
-    echo "Activating virtual environment..."
-    source localawenv/bin/activate
-fi
-
-# Build the executable for Linux
-echo "Building..."
-pyinstaller --onefile --name Localaw \
-    --add-data "web:web" \
-    --add-data "src:src" \
-    --hidden-import uvicorn \
-    --hidden-import fastapi \
-    --hidden-import openai \
-    --hidden-import httpx \
-    --collect-all uvicorn \
-    --collect-all fastapi \
-    --collect-all openai \
-    --console \
-    src/main.py
-
-if [ $? -eq 0 ]; then
-    echo
-    echo "========================================"
-    echo "Build completed successfully!"
-    echo "Executable: dist/Localaw"
-    echo "========================================"
-    
-    # Move executable to build directory
-    mv dist/Localaw build/ 2>/dev/null
-    
-    # Make the executable executable
-    chmod +x build/Localaw
-    
-    echo "Executable moved to: build/Localaw"
-    echo "File permissions set to executable"
-else
-    echo
-    echo "Build failed!"
-    exit 1
-fi
-
-echo
-read -p "Press Enter to continue..."
+build windows amd64 .exe
+build windows 386   .exe
+build linux   amd64
+build linux   386
+build linux   arm64
