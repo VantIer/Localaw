@@ -197,6 +197,7 @@ cp config.example.json config.json    # 填写 llm.api_base / api_key / model
 
 - 低风险：`get_cwd`、`list_dir`、`read_file`；其余为高风险。
 - 安全检查（仅 `exec_cmd`）：拦截 `rm` 命中根/`*`、`format c:`、`mkfs.`、`dd if=/dev/zero`。
+- `edit_file` 采用**精确文本匹配**（`old_text`/`new_text`，可 `replace_all`）：`old_text` 必须唯一命中，否则拒绝写入并回灌错误，从根本上避免行号编辑导致的重复行/错位。
 
 ---
 
@@ -411,6 +412,7 @@ Main endpoints: `/api/config`, `/api/sessions*`, `/api/history`, `/api/send`, `/
 
 - Low risk: `get_cwd`, `list_dir`, `read_file`; the rest are high risk.
 - Safety check (only for `exec_cmd`): blocks `rm` targeting root/`*`, `format c:`, `mkfs.`, `dd if=/dev/zero`.
+- `edit_file` uses **exact-text matching** (`old_text`/`new_text`, optional `replace_all`): `old_text` must match uniquely or the write is rejected with an error fed back to the model, eliminating the duplicated/misplaced lines caused by line-number editing.
 
 ## 11. Authorization, rounds and the queue
 

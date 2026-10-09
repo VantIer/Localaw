@@ -90,13 +90,12 @@ var specs = []Spec{
 	},
 	{
 		Name:        "edit_file",
-		Description: "Edit a text file by inserting, deleting or replacing lines.",
+		Description: "Edit an existing text file by replacing an exact snippet. old_text is matched literally against the file (including indentation and line breaks) and must occur exactly once unless replace_all is true. Prefer this over rewriting the whole file; use write_file only to create or fully overwrite a file. If old_text is missing or ambiguous, the edit is rejected and you should read the file again and add surrounding context.",
 		Params: []Param{
 			{Name: "path", Required: true, Description: "File path."},
-			{Name: "operation", Required: true, Description: "One of: add, del, modify."},
-			{Name: "start_line", Description: "1-based start line."},
-			{Name: "end_line", Description: "1-based end line (del/modify)."},
-			{Name: "content", Description: "Content for add/modify."},
+			{Name: "old_text", Required: true, Description: "Exact existing text to replace. Copy it verbatim from read_file, including indentation and newlines; include surrounding lines if the snippet is not unique."},
+			{Name: "new_text", Required: true, Description: "Replacement text (use an empty string to delete the matched text)."},
+			{Name: "replace_all", Description: "Set to true to replace every occurrence instead of requiring a unique match (default false)."},
 		},
 	},
 	{

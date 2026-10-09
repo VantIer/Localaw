@@ -101,42 +101,63 @@ func (f *FileModule) ListDir(path string) (string, error) {
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
-// CreateDir creates a directory and its parents.
+// CreateDir creates a directory and its parents. It is idempotent: creating a
+// directory that already exists reports success and changes nothing.
 func (f *FileModule) CreateDir(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
-	if _, err := os.Stat(path); err == nil {
-		return "", fmt.Errorf("directory already exists: %s", path)
+	// MkdirAll is the source of truth for the outcome (idempotent for an
+	// existing directory, and an error when the path is occupied by a file);
+	// the pre-check only selects the message.
+	existed := false
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		existed = true
 	}
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return "", err
 	}
+	if existed {
+		return fmt.Sprintf("Directory already exists: %s", path), nil
+	}
 	return fmt.Sprintf("Successfully created directory: %s", path), nil
 }
 
-// CreateFile creates an empty file (parents included).
+// CreateFile creates an empty file (parents included). It is idempotent:
+// creating a file that already exists reports success and never truncates its
+// existing content.
 func (f *FileModule) CreateFile(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
+	if info, err := os.Stat(path); err == nil {
+		if info.IsDir() {
+			return "", fmt.Errorf("%s is a directory", path)
+		}
+		return fmt.Sprintf("File already exists: %s", path), nil
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
-	fh, err := os.OpenFile(path, os.O_CREATE, 0o644)
+	fh, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if err != nil {
+		// Lost a creation race: treat an existing file as success.
+		if os.IsExist(err) {
+			return fmt.Sprintf("File already exists: %s", path), nil
+		}
 		return "", err
 	}
 	fh.Close()
 	return fmt.Sprintf("Successfully created file: %s", path), nil
 }
 
-// Delete removes a file or directory.
+// Delete removes a file or directory. A symbolic link is removed as a link
+// (Lstat, not Stat), so even a dangling link can be deleted.
 func (f *FileModule) Delete(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return "", err
 	}
@@ -269,7 +290,9 @@ func readLineRange(fh *os.File, start, end int) (string, error) {
 	return strings.Join(kept, "\n"), nil
 }
 
-// WriteFile writes content to a file (parents included).
+// WriteFile writes content to a file (parents included). The write is atomic:
+// the content goes to a temporary file in the same directory which is renamed
+// over the target, so a crash mid-write cannot leave a truncated file.
 func (f *FileModule) WriteFile(path, content string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is required")
@@ -277,24 +300,42 @@ func (f *FileModule) WriteFile(path, content string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	// Preserve the permissions of an existing file; new files get 0o644.
+	perm := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		if info.IsDir() {
+			return "", fmt.Errorf("%s is a directory", path)
+		}
+		perm = info.Mode().Perm()
+	}
+	if err := atomicWriteFile(path, content, perm); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("Successfully wrote to: %s", path), nil
 }
 
-// EditFile edits a file by inserting, deleting or replacing lines. The original
-// is streamed through a temporary file in the same directory which is then
-// atomically renamed over the target, so memory use is bounded regardless of
-// file size and a crash mid-write cannot corrupt the original.
-func (f *FileModule) EditFile(path, operation string, startLine, endLine int, content string) (string, error) {
+// maxEditFileSize bounds the size of a file read into memory for an exact-match
+// edit. Larger files are rejected rather than risking an out-of-memory crash.
+const maxEditFileSize = 64 << 20 // 64 MiB
+
+// EditFile replaces an exact snippet in a file. Following Zed's edit design, the
+// caller supplies the literal text to find (oldText) and its replacement
+// (newText) instead of line numbers. Line-number edits silently drift out of
+// sync with the file and corrupt it (duplicated or misplaced lines); an exact
+// match either lands precisely or fails loudly and is reported back so the model
+// can re-read the file and retry.
+//
+// oldText must occur exactly once unless replaceAll is set. Line-ending
+// differences between oldText and the file ("\n" vs "\r\n") are tolerated. The
+// write is atomic: the result is written to a temporary file in the same
+// directory and renamed over the target, so a crash mid-write cannot corrupt the
+// original.
+func (f *FileModule) EditFile(path, oldText, newText string, replaceAll bool) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
-	switch operation {
-	case "add", "del", "modify":
-	default:
-		return "", fmt.Errorf("unknown operation: %s (use add, del, or modify)", operation)
+	if oldText == "" {
+		return "", fmt.Errorf("old_text is required and must not be empty")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -303,147 +344,204 @@ func (f *FileModule) EditFile(path, operation string, startLine, endLine int, co
 	if info.IsDir() {
 		return "", fmt.Errorf("%s is a directory", path)
 	}
-	start := startLine - 1
-	if start < 0 {
-		start = 0
+	if info.Size() > maxEditFileSize {
+		return "", fmt.Errorf("%s is too large to edit (limit %d bytes)", path, maxEditFileSize)
 	}
-	if operation != "add" && endLine > 0 && endLine < startLine {
-		return "", fmt.Errorf("end_line (%d) must be >= start_line (%d)", endLine, startLine)
-	}
-
-	src, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
-	defer src.Close()
+	original := string(data)
 
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".localaw-edit-*")
-	if err != nil {
+	match, ok := resolveEditText(original, oldText)
+	if !ok {
+		return "", fmt.Errorf("could not find matching text in %s: old_text did not match the file. "+
+			"It must match byte-for-byte, including indentation and line breaks; read the file again and copy old_text exactly", path)
+	}
+
+	// Keep the file's line-ending convention: a CRLF file stays CRLF even when
+	// old_text/new_text were written with LF.
+	newText = applyLineEnding(newText, detectLineEnding(original))
+
+	var updated string
+	if replaceAll {
+		updated = strings.ReplaceAll(original, match, newText)
+	} else {
+		positions := findOverlapping(original, match, 2)
+		switch len(positions) {
+		case 0:
+			// Unreachable: resolveEditText already confirmed a match.
+			return "", fmt.Errorf("could not find matching text in %s", path)
+		case 1:
+			pos := positions[0]
+			updated = original[:pos] + newText + original[pos+len(match):]
+		default:
+			return "", fmt.Errorf("old_text matched multiple locations in %s at lines: %s. "+
+				"Include more surrounding context in old_text to make the match unique, or set replace_all to true to replace every occurrence",
+				path, matchLines(original, positions))
+		}
+	}
+
+	if updated == original {
+		return fmt.Sprintf("No change made to %s: new_text equals the matched text", path), nil
+	}
+	if err := atomicWriteFile(path, updated, info.Mode().Perm()); err != nil {
 		return "", err
+	}
+	n := strings.Count(original, match)
+	if n <= 1 {
+		return fmt.Sprintf("Successfully edited file: %s", path), nil
+	}
+	return fmt.Sprintf("Successfully edited file: %s (%d replacements)", path, n), nil
+}
+
+// resolveEditText returns the variant of oldText that literally occurs in s. It
+// first tries oldText verbatim, then retries with the opposite line-ending
+// convention so text copied using "\n" still matches a CRLF file (and vice
+// versa). ok is false when no variant occurs.
+func resolveEditText(s, oldText string) (string, bool) {
+	if strings.Contains(s, oldText) {
+		return oldText, true
+	}
+	if strings.Contains(oldText, "\r\n") {
+		if alt := strings.ReplaceAll(oldText, "\r\n", "\n"); strings.Contains(s, alt) {
+			return alt, true
+		}
+	}
+	if strings.Contains(oldText, "\n") {
+		if alt := strings.ReplaceAll(oldText, "\n", "\r\n"); strings.Contains(s, alt) {
+			return alt, true
+		}
+	}
+	return "", false
+}
+
+// detectLineEnding reports the dominant line ending of s: "\r\n" when it
+// contains at least one CRLF sequence, otherwise "\n".
+func detectLineEnding(s string) string {
+	if strings.Contains(s, "\r\n") {
+		return "\r\n"
+	}
+	return "\n"
+}
+
+// applyLineEnding rewrites all line endings in text to eol, so a replacement
+// matches the surrounding file's convention.
+func applyLineEnding(text, eol string) string {
+	if text == "" {
+		return text
+	}
+	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	if eol == "\r\n" {
+		return strings.ReplaceAll(normalized, "\n", "\r\n")
+	}
+	return normalized
+}
+
+// findOverlapping returns up to limit start offsets of sub in s, counting
+// overlapping occurrences (so "aa" matches twice in "aaa"). This mirrors Zed's
+// ambiguity policy: an overlapping match is not a unique location.
+func findOverlapping(s, sub string, limit int) []int {
+	if sub == "" || limit <= 0 {
+		return nil
+	}
+	var out []int
+	start := 0
+	for len(out) < limit {
+		i := strings.Index(s[start:], sub)
+		if i < 0 {
+			break
+		}
+		pos := start + i
+		out = append(out, pos)
+		start = pos + 1
+	}
+	return out
+}
+
+// matchLines renders the 1-based line numbers for the given match offsets.
+func matchLines(s string, positions []int) string {
+	lines := make([]string, len(positions))
+	for i, pos := range positions {
+		lines[i] = strconv.Itoa(strings.Count(s[:pos], "\n") + 1)
+	}
+	return strings.Join(lines, ", ")
+}
+
+// atomicTmpPattern names the temporary files used for atomic writes.
+const atomicTmpPattern = ".localaw-tmp-*"
+
+// atomicWriteFile writes content to path via a temporary file in the target's
+// directory followed by an atomic rename, so the target is never left partially
+// written.
+func atomicWriteFile(path, content string, perm os.FileMode) error {
+	return writeStreamAtomic(path, strings.NewReader(content), perm)
+}
+
+// WriteStream streams r to path atomically: the content goes to a temporary
+// file in the target's directory and is renamed into place, so a failure never
+// leaves a partial file behind. A final symlink is followed so the link's target
+// is written instead of replacing the link.
+func (f *FileModule) WriteStream(path string, r io.Reader, perm os.FileMode) error {
+	return writeStreamAtomic(path, r, perm)
+}
+
+func writeStreamAtomic(path string, r io.Reader, perm os.FileMode) error {
+	// Follow a final symlink so the write lands on the link's target (as a
+	// plain open/create would) instead of replacing the link itself.
+	target := resolveWriteTarget(path)
+	tmp, err := os.CreateTemp(filepath.Dir(target), atomicTmpPattern)
+	if err != nil {
+		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-
-	w := bufio.NewWriter(tmp)
-	r := bufio.NewReaderSize(src, readChunkSize)
-
-	// 1. Copy the lines that precede the edit point.
-	copied, last, wrote, err := copyLines(w, r, start)
-	if err != nil {
+	cleanup := true
+	defer func() {
+		if cleanup {
+			os.Remove(tmpName)
+		}
+	}()
+	if _, err := io.Copy(tmp, r); err != nil {
 		tmp.Close()
-		return "", err
+		return err
 	}
-	if copied < start {
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
-		return "", fmt.Errorf("start line %d exceeds file line count", startLine)
-	}
-
-	// 2. Skip the lines being deleted or replaced.
-	if operation != "add" {
-		skip := endLine - start
-		if endLine <= 0 || skip < 0 {
-			skip = int(^uint(0) >> 1) // to the end
-		}
-		if err := skipLines(r, skip); err != nil {
-			tmp.Close()
-			return "", err
-		}
-	}
-
-	// 3. Write the replacement content, adding separators only where needed to
-	//    keep the surrounding lines intact.
-	_, peekErr := r.Peek(1)
-	hasSuffix := peekErr == nil
-	if operation != "del" {
-		if wrote && last != '\n' {
-			if err := w.WriteByte('\n'); err != nil {
-				tmp.Close()
-				return "", err
-			}
-		}
-		if _, err := w.WriteString(content); err != nil {
-			tmp.Close()
-			return "", err
-		}
-		if len(content) > 0 {
-			wrote = true
-			last = content[len(content)-1]
-		}
-		if hasSuffix && (!wrote || last != '\n') {
-			if err := w.WriteByte('\n'); err != nil {
-				tmp.Close()
-				return "", err
-			}
-		}
-	}
-
-	// 4. Copy the remainder of the file unchanged.
-	if _, err := io.Copy(w, r); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := w.Flush(); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	// Close both handles before renaming: Windows cannot replace an open file.
-	if err := src.Close(); err != nil {
-		tmp.Close()
-		return "", err
+		return err
 	}
 	if err := tmp.Close(); err != nil {
-		return "", err
+		return err
 	}
-	if err := os.Chmod(tmpName, info.Mode().Perm()); err != nil {
-		return "", err
+	if err := os.Chmod(tmpName, perm); err != nil {
+		return err
 	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return "", err
+	if err := os.Rename(tmpName, target); err != nil {
+		return err
 	}
-	return fmt.Sprintf("Successfully performed %s on file: %s", operation, path), nil
-}
-
-// copyLines copies up to n lines from r to dst, returning the number copied,
-// the last byte written and whether anything was written.
-func copyLines(dst *bufio.Writer, r *bufio.Reader, n int) (int, byte, bool, error) {
-	copied := 0
-	var last byte
-	wrote := false
-	for copied < n {
-		b, err := r.ReadBytes('\n')
-		if len(b) > 0 {
-			if _, werr := dst.Write(b); werr != nil {
-				return copied, last, wrote, werr
-			}
-			last = b[len(b)-1]
-			wrote = true
-			copied++
-		}
-		if err != nil {
-			if err == io.EOF {
-				return copied, last, wrote, nil
-			}
-			return copied, last, wrote, err
-		}
-	}
-	return copied, last, wrote, nil
-}
-
-// skipLines discards up to n lines from r.
-func skipLines(r *bufio.Reader, n int) error {
-	for i := 0; i < n; i++ {
-		b, err := r.ReadBytes('\n')
-		if len(b) == 0 && err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			if err == io.EOF {
-				return nil
-			}
-			return err
-		}
-	}
+	cleanup = false
 	return nil
+}
+
+// resolveWriteTarget follows a final symlink so a write lands on the link's
+// target rather than replacing the link. A dangling link is resolved lexically
+// so its target can still be created, matching a plain open/create.
+func resolveWriteTarget(path string) string {
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		return path
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	link, err := os.Readlink(path)
+	if err != nil {
+		return path
+	}
+	if !filepath.IsAbs(link) {
+		link = filepath.Join(filepath.Dir(path), link)
+	}
+	return link
 }
 
 // Copy copies a file or directory.
@@ -533,10 +631,9 @@ func (f *FileModule) Dispatch(action string, params map[string]any) (string, err
 	case "edit_file":
 		return f.EditFile(
 			command.String(params["path"]),
-			command.String(params["operation"]),
-			toInt(params["start_line"]),
-			toInt(params["end_line"]),
-			command.String(params["content"]),
+			command.String(params["old_text"]),
+			command.String(params["new_text"]),
+			toBool(params["replace_all"]),
 		)
 	case "copy":
 		return f.Copy(command.String(params["src"]), command.String(params["dest"]))
@@ -563,6 +660,23 @@ func toInt(v any) int {
 		return 0
 	}
 	return 0
+}
+
+func toBool(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case int:
+		return t != 0
+	case int64:
+		return t != 0
+	case float64:
+		return t != 0
+	case string:
+		b, err := strconv.ParseBool(strings.TrimSpace(t))
+		return err == nil && b
+	}
+	return false
 }
 
 func copyFile(src, dest string) error {

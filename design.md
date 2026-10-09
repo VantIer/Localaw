@@ -79,6 +79,7 @@ Engine 直接持有单个本地 `Queue`。会话不再绑定 Agent。
 - `FileModule`：`GetCwd/ListDir/ListEntries/CreateDir/CreateFile/Delete/Rename/ReadFile/WriteFile/EditFile/Copy/Move`。
   业务错误以 Go error 返回，由 Executor 统一转为 `Error: ...` 结果串。
   `read_file` 整文件截断 **51200 字符**。
+  `edit_file` 采用 Zed 式**精确文本匹配**（`old_text`/`new_text`）：要求 `old_text` 在文件中唯一出现，命中失败或歧义时**拒绝写入**（不再使用易漂移的行号编辑，避免重复行/错位编辑）；写入经临时文件原子替换。
 - `Executor.Execute`：`exec_cmd` 走 Shell，其余走 `FileModule.Dispatch`。
   - Windows：`cmd /C "chcp 65001>NUL & <cmd>"`，新进程组，`taskkill /F /T` 终止进程树。
   - Unix：`/bin/sh -c`，`Setpgid`，`kill(-pgid, SIGKILL)`。

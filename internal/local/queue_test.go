@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -41,5 +42,28 @@ func TestQueueTimeoutKillsProcess(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 4*time.Second {
 		t.Fatalf("timeout took too long: %s", elapsed)
+	}
+}
+
+// A completed file operation must not be relabelled as timed out or cancelled
+// just because the job's context expired while it ran (file ops ignore ctx).
+func TestExecJobDoesNotMaskCompletedFileOp(t *testing.T) {
+	dir := t.TempDir()
+	q := NewQueue(NewExecutor(NewFileModule()), 4, time.Second)
+	defer q.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // ctx is done, but the Job itself is never marked cancelled.
+
+	p := filepath.Join(dir, "x.txt")
+	j := NewJob(ctx, "write_file", map[string]any{"path": p, "content": "ok"}, "")
+	q.execJob(j)
+
+	r := <-j.Result
+	if r.Err != nil {
+		t.Fatalf("completed file op reported %v", r.Err)
+	}
+	if got, err := os.ReadFile(p); err != nil || string(got) != "ok" {
+		t.Fatalf("file content = %q, err = %v", got, err)
 	}
 }

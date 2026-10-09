@@ -66,7 +66,8 @@ func (s *Server) originGuard(next http.Handler) http.Handler {
 
 // sameOrigin accepts the request when the Origin host exactly matches the
 // request host, or when both are loopback aliases (localhost / 127.0.0.1 /
-// [::1]), which browsers may use interchangeably for the same server.
+// [::1]) with the same port. Requiring an equal port stops a page served from
+// another loopback port from driving the panel.
 func sameOrigin(origin, host string) bool {
 	u, err := url.Parse(origin)
 	if err != nil {
@@ -75,7 +76,8 @@ func sameOrigin(origin, host string) bool {
 	if strings.EqualFold(u.Host, host) {
 		return true
 	}
-	return isLoopbackHost(u.Hostname()) && isLoopbackHost(hostnameOnly(host))
+	return isLoopbackHost(u.Hostname()) && isLoopbackHost(hostnameOnly(host)) &&
+		u.Port() == hostPort(host)
 }
 
 func hostnameOnly(hostport string) string {
@@ -83,6 +85,13 @@ func hostnameOnly(hostport string) string {
 		return h
 	}
 	return hostport
+}
+
+func hostPort(hostport string) string {
+	if _, p, err := net.SplitHostPort(hostport); err == nil {
+		return p
+	}
+	return ""
 }
 
 func isLoopbackHost(h string) bool {
@@ -223,6 +232,10 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": err.Error()})
 		return
 	}
+	if strings.TrimSpace(req.Message) == "" {
+		writeJSON(w, 400, map[string]any{"error": "message is required"})
+		return
+	}
 	if req.SessionID == "" {
 		sess, err := s.eng.EnsureSession()
 		if err != nil {
@@ -292,6 +305,10 @@ func (s *Server) handleSetAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := readJSON(r, &req); err != nil || req.Mode == nil {
 		writeJSON(w, 400, map[string]any{"error": "mode required"})
+		return
+	}
+	if *req.Mode < 0 || *req.Mode > 2 {
+		writeJSON(w, 400, map[string]any{"error": "mode must be 0, 1 or 2"})
 		return
 	}
 	s.eng.SetAuthMode(*req.Mode)
@@ -514,14 +531,14 @@ func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	dest := filepath.Join(s.currentDir(), filepath.Base(header.Filename))
-	out, err := os.Create(dest)
-	if err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+
+	name := filepath.Base(header.Filename)
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+		writeJSON(w, 400, map[string]any{"error": "invalid file name"})
 		return
 	}
-	defer out.Close()
-	if _, err := io.Copy(out, file); err != nil {
+	dest := filepath.Join(s.currentDir(), name)
+	if err := s.file.WriteStream(dest, file, 0o644); err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
 	}

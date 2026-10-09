@@ -19,6 +19,7 @@ Rules:
 - Accomplish the task exclusively through the provided tools; never fabricate tool output.
 - Prefer absolute paths. Shell commands do not share state between calls.
 - Read-only tools (get_cwd, list_dir, read_file) are low risk; other tools may require user authorization.
+- To change an existing file, use edit_file with an exact old_text snippet copied verbatim from read_file (include enough surrounding context to make it unique). Use write_file only to create a file or fully overwrite it.
 - For long-running tasks, start them detached (e.g. nohup ... & / start "" /b ...) so the tool returns promptly.
 `
 

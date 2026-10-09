@@ -209,13 +209,19 @@ func (q *Queue) execJob(j *Job) {
 		defer cancel()
 	}
 	out, err := q.exec.Execute(ctx, j.Action, j.Params)
-	switch {
-	case j.Cancelled():
-		err = ErrCancelled
-	case ctx.Err() == context.DeadlineExceeded:
-		err = &TimeoutError{After: q.timeout}
-	case ctx.Err() == context.Canceled:
-		err = ErrCancelled
+	// Only reinterpret the outcome when execution actually failed. File
+	// operations are not context-aware and may complete successfully even
+	// though the deadline expired or the job was cancelled; reporting a
+	// timeout/cancellation for a completed file write would be misleading.
+	if err != nil {
+		switch {
+		case j.Cancelled():
+			err = ErrCancelled
+		case ctx.Err() == context.DeadlineExceeded:
+			err = &TimeoutError{After: q.timeout}
+		case ctx.Err() == context.Canceled:
+			err = ErrCancelled
+		}
 	}
 	j.Result <- JobResult{Output: out, Err: err}
 }
