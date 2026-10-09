@@ -1,0 +1,63 @@
+internal/local/file_test.go
+  s_d699c473bd89d8::t_60d7fd67d4352f 30,149,154-155,157-158,210,219,227-228,245-246
+  s_d699c473bd89d8::t_2f136da6e1a519 70-86
+  s_d699c473bd89d8::t_a7cdc4587090af 4,6
+  s_d699c473bd89d8::t_d8d80e691162b7 107,110,113-114,116-117,121,125-130,133-139,142-148,150-153,156,159,162,164-167,170-178,181-209,211-218,220-226,229-244,247-248
+  s_d699c473bd89d8::t_26dda58a48a92a 310-326,328-391
+  s_d699c473bd89d8::t_0d23a9e2f0b881 327
+  s_d699c473bd89d8::t_9b9b736cb274d5 392-446
+config.example.json
+  s_d699c473bd89d8::t_38cfd88f9cef07 8
+internal/config/config.go
+  s_d699c473bd89d8::t_1d295d60b78d93 22
+internal/local/file.go
+  s_d699c473bd89d8::t_8ed0c4e5f241ef 665-681
+  s_d699c473bd89d8::t_91926c1be280b9 419-441
+  s_d699c473bd89d8::t_3092d024de2ee7 293-295,303-311
+  s_d699c473bd89d8::t_c89b9cf739d86f 472-475,479-494,505,509,511,519,526-532,534-535,537-544
+  s_d699c473bd89d8::t_9bdf481a3237ed 122,317-333,337-338,347-348,350,354,356-359,366-388,391-393,395-396,398-408,410-413,416-417,442-454,456-458,460-461,463-467,469-471,476-478,495-504,507,514,516-517,520,522-523
+  s_d699c473bd89d8::t_3d90eaec349f17 362-364
+  s_d699c473bd89d8::t_cff673d15a503c 104-105,126-128,133-138,142,144-147
+  s_d699c473bd89d8::t_b56f5c540ae96e 634-636
+  s_d699c473bd89d8::t_3976715ea14293 154-155,160
+  s_d699c473bd89d8::t_00e676de23cf02 110-115,120-121
+internal/command/command.go
+  s_d699c473bd89d8::t_0e6ef6644cf06a 93,96-98
+internal/web/server_test.go
+  s_d699c473bd89d8::t_57966dc0b82daa 148-217,219-222
+  s_d699c473bd89d8::t_1fbbaef746ed8a 4,6,9-10
+  s_d699c473bd89d8::t_792e0d75eaf9d0 218
+  s_d699c473bd89d8::t_698da8d7e7b625 223-248
+internal/local/queue.go
+  s_d699c473bd89d8::t_1b4636f2f83340 212-224
+README.md
+  s_d699c473bd89d8::t_00376583d3119b 415
+  s_d699c473bd89d8::t_346f34fc6316b5 200
+internal/local/queue_test.go
+  s_d699c473bd89d8::t_050c7ec3eead65 5
+  s_d699c473bd89d8::t_19b986eb0d0241 47-69
+design.md
+  s_d699c473bd89d8::t_20dcc8cb5c1a64 82
+internal/web/server.go
+  s_d699c473bd89d8::t_5f3bb6dfc2d910 310-313
+  s_d699c473bd89d8::t_1f8a649ce1792e 235-238
+  s_d699c473bd89d8::t_f01909ba9fae3f 534
+  s_d699c473bd89d8::t_950b9cc73c5517 69-70,79-80,90-96
+  s_d699c473bd89d8::t_ab709dafcbf263 535-537,540-541
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7a4d2e9e7142ccbc78431f2d59d4770e27919c61",
+  "prompts": {},
+  "sessions": {
+    "s_d699c473bd89d8": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ee185deceffe7Hh5BakwlMMtVU",
+        "model": "unknown"
+      },
+      "human_author": "VantIer <vantler@live.cn>"
+    }
+  }
+}
