@@ -4,20 +4,34 @@ package local
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"localaw/internal/command"
 )
 
-// ReadFileLimit bounds whole-file reads (characters), matching the reference
+// ErrInvalid marks a file operation rejected because of caller input (bad
+// path, wrong type, ambiguous edit, ...) rather than an OS/I/O failure.
+var ErrInvalid = errors.New("invalid file operation")
+
+type invalidError struct{ msg string }
+
+func (e *invalidError) Error() string { return e.msg }
+
+func (e *invalidError) Is(target error) bool { return target == ErrInvalid }
+
+func invalidf(format string, args ...any) error {
+	return &invalidError{msg: fmt.Sprintf(format, args...)}
+}
+
+// readFileLimit bounds whole-file reads (characters), matching the reference
 // implementation.
-const ReadFileLimit = 51200
+const readFileLimit = 51200
 
 // readChunkSize is the maximum amount read from disk in one step, so large
 // files are never loaded into memory in a single allocation.
@@ -51,7 +65,7 @@ func (f *FileModule) ListEntries(path string) ([]Entry, error) {
 		return nil, err
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", path)
+		return nil, invalidf("%s is not a directory", path)
 	}
 	items, err := os.ReadDir(path)
 	if err != nil {
@@ -105,13 +119,16 @@ func (f *FileModule) ListDir(path string) (string, error) {
 // directory that already exists reports success and changes nothing.
 func (f *FileModule) CreateDir(path string) (string, error) {
 	if path == "" {
-		return "", fmt.Errorf("path is required")
+		return "", invalidf("path is required")
 	}
 	// MkdirAll is the source of truth for the outcome (idempotent for an
 	// existing directory, and an error when the path is occupied by a file);
 	// the pre-check only selects the message.
 	existed := false
-	if info, err := os.Stat(path); err == nil && info.IsDir() {
+	if info, err := os.Stat(path); err == nil {
+		if !info.IsDir() {
+			return "", invalidf("%s is a file", path)
+		}
 		existed = true
 	}
 	if err := os.MkdirAll(path, 0o755); err != nil {
@@ -128,11 +145,11 @@ func (f *FileModule) CreateDir(path string) (string, error) {
 // existing content.
 func (f *FileModule) CreateFile(path string) (string, error) {
 	if path == "" {
-		return "", fmt.Errorf("path is required")
+		return "", invalidf("path is required")
 	}
 	if info, err := os.Stat(path); err == nil {
 		if info.IsDir() {
-			return "", fmt.Errorf("%s is a directory", path)
+			return "", invalidf("%s is a directory", path)
 		}
 		return fmt.Sprintf("File already exists: %s", path), nil
 	}
@@ -155,7 +172,7 @@ func (f *FileModule) CreateFile(path string) (string, error) {
 // (Lstat, not Stat), so even a dangling link can be deleted.
 func (f *FileModule) Delete(path string) (string, error) {
 	if path == "" {
-		return "", fmt.Errorf("path is required")
+		return "", invalidf("path is required")
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -174,16 +191,16 @@ func (f *FileModule) Delete(path string) (string, error) {
 // Rename renames a file or directory within its parent.
 func (f *FileModule) Rename(path, newName string) (string, error) {
 	if path == "" || newName == "" {
-		return "", fmt.Errorf("path and new_name are required")
+		return "", invalidf("path and new_name are required")
 	}
 	// new_name must be a plain name: no path separators and not a relative
 	// navigation token, otherwise it could move across directories.
 	if newName == "." || newName == ".." || filepath.Base(newName) != newName {
-		return "", fmt.Errorf("new_name must be a plain name without path separators: %s", newName)
+		return "", invalidf("new_name must be a plain name without path separators: %s", newName)
 	}
 	target := filepath.Join(filepath.Dir(path), newName)
 	if _, err := os.Stat(target); err == nil {
-		return "", fmt.Errorf("target name already exists: %s", newName)
+		return "", invalidf("target name already exists: %s", newName)
 	}
 	if err := os.Rename(path, target); err != nil {
 		return "", err
@@ -195,20 +212,20 @@ func (f *FileModule) Rename(path, newName string) (string, error) {
 // are streamed so a very large file is never loaded into memory in one piece.
 func (f *FileModule) ReadFile(path string, startLine, endLine int) (string, error) {
 	if path == "" {
-		return "", fmt.Errorf("path is required")
+		return "", invalidf("path is required")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return "", err
 	}
 	if info.IsDir() {
-		return "", fmt.Errorf("%s is a directory", path)
+		return "", invalidf("%s is a directory", path)
 	}
 	if startLine < 0 {
 		startLine = 0
 	}
 	if endLine < 0 {
-		return "", fmt.Errorf("end_line must be >= 0")
+		return "", invalidf("end_line must be >= 0")
 	}
 	fh, err := os.Open(path)
 	if err != nil {
@@ -217,47 +234,41 @@ func (f *FileModule) ReadFile(path string, startLine, endLine int) (string, erro
 	defer fh.Close()
 
 	if startLine <= 0 && endLine <= 0 {
-		return readWholeLimited(fh, ReadFileLimit)
+		return readWholeLimited(fh, readFileLimit)
 	}
 	start := startLine
 	if start <= 0 {
 		start = 1
 	}
 	if endLine > 0 && endLine < start {
-		return "", fmt.Errorf("end_line (%d) must be >= start_line (%d)", endLine, startLine)
+		return "", invalidf("end_line (%d) must be >= start_line (%d)", endLine, startLine)
 	}
 	return readLineRange(fh, start, endLine)
 }
 
-// readWholeLimited reads at most limit runes, never reading more than
-// readChunkSize bytes at a time, and notes when the file was longer.
+// readWholeLimited reads at most limit runes, streaming through a buffered
+// reader so a large file is never loaded into memory in one piece. It reads one
+// extra rune to distinguish an exact-length file from a truncated one.
 func readWholeLimited(fh *os.File, limit int) (string, error) {
+	if limit <= 0 {
+		return "", nil
+	}
+	r := bufio.NewReaderSize(fh, readChunkSize)
 	var sb strings.Builder
-	buf := make([]byte, readChunkSize)
-	runes := 0
-	eof := false
-	for runes < limit {
-		n, err := fh.Read(buf)
-		if n > 0 {
-			sb.Write(buf[:n])
-			runes = utf8.RuneCountInString(sb.String())
-		}
+	for count := 0; count < limit; count++ {
+		ch, _, err := r.ReadRune()
 		if err == io.EOF {
-			eof = true
-			break
+			return sb.String(), nil
 		}
 		if err != nil {
 			return "", err
 		}
+		sb.WriteRune(ch)
 	}
-	s := sb.String()
-	if runes > limit {
-		s = string([]rune(s)[:limit])
+	if _, _, err := r.ReadRune(); err == io.EOF {
+		return sb.String(), nil
 	}
-	if runes >= limit && !eof {
-		s += fmt.Sprintf("\n\n[Output truncated at %d characters; use start_line/end_line to read further.]", limit)
-	}
-	return s, nil
+	return sb.String() + fmt.Sprintf("\n\n[Output truncated at %d characters; use start_line/end_line to read further.]", limit), nil
 }
 
 // readLineRange streams lines, returning the 1-based inclusive [start,end]
@@ -285,7 +296,7 @@ func readLineRange(fh *os.File, start, end int) (string, error) {
 		}
 	}
 	if start > lineNo {
-		return "", fmt.Errorf("start line %d exceeds file line count (%d)", start, lineNo)
+		return "", invalidf("start line %d exceeds file line count (%d)", start, lineNo)
 	}
 	return strings.Join(kept, "\n"), nil
 }
@@ -295,7 +306,7 @@ func readLineRange(fh *os.File, start, end int) (string, error) {
 // over the target, so a crash mid-write cannot leave a truncated file.
 func (f *FileModule) WriteFile(path, content string) (string, error) {
 	if path == "" {
-		return "", fmt.Errorf("path is required")
+		return "", invalidf("path is required")
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
@@ -304,7 +315,7 @@ func (f *FileModule) WriteFile(path, content string) (string, error) {
 	perm := os.FileMode(0o644)
 	if info, err := os.Stat(path); err == nil {
 		if info.IsDir() {
-			return "", fmt.Errorf("%s is a directory", path)
+			return "", invalidf("%s is a directory", path)
 		}
 		perm = info.Mode().Perm()
 	}
@@ -332,20 +343,20 @@ const maxEditFileSize = 64 << 20 // 64 MiB
 // original.
 func (f *FileModule) EditFile(path, oldText, newText string, replaceAll bool) (string, error) {
 	if path == "" {
-		return "", fmt.Errorf("path is required")
+		return "", invalidf("path is required")
 	}
 	if oldText == "" {
-		return "", fmt.Errorf("old_text is required and must not be empty")
+		return "", invalidf("old_text is required and must not be empty")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return "", err
 	}
 	if info.IsDir() {
-		return "", fmt.Errorf("%s is a directory", path)
+		return "", invalidf("%s is a directory", path)
 	}
 	if info.Size() > maxEditFileSize {
-		return "", fmt.Errorf("%s is too large to edit (limit %d bytes)", path, maxEditFileSize)
+		return "", invalidf("%s is too large to edit (limit %d bytes)", path, maxEditFileSize)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -355,7 +366,7 @@ func (f *FileModule) EditFile(path, oldText, newText string, replaceAll bool) (s
 
 	match, ok := resolveEditText(original, oldText)
 	if !ok {
-		return "", fmt.Errorf("could not find matching text in %s: old_text did not match the file. "+
+		return "", invalidf("could not find matching text in %s: old_text did not match the file. "+
 			"It must match byte-for-byte, including indentation and line breaks; read the file again and copy old_text exactly", path)
 	}
 
@@ -368,18 +379,15 @@ func (f *FileModule) EditFile(path, oldText, newText string, replaceAll bool) (s
 		updated = strings.ReplaceAll(original, match, newText)
 	} else {
 		positions := findOverlapping(original, match, 2)
-		switch len(positions) {
-		case 0:
-			// Unreachable: resolveEditText already confirmed a match.
-			return "", fmt.Errorf("could not find matching text in %s", path)
-		case 1:
-			pos := positions[0]
-			updated = original[:pos] + newText + original[pos+len(match):]
-		default:
-			return "", fmt.Errorf("old_text matched multiple locations in %s at lines: %s. "+
+		if len(positions) > 1 {
+			return "", invalidf("old_text matched multiple locations in %s at lines: %s. "+
 				"Include more surrounding context in old_text to make the match unique, or set replace_all to true to replace every occurrence",
 				path, matchLines(original, positions))
 		}
+		// resolveEditText only returns a match that occurs in the file, so
+		// positions contains exactly one entry here.
+		pos := positions[0]
+		updated = original[:pos] + newText + original[pos+len(match):]
 	}
 
 	if updated == original {
@@ -547,7 +555,7 @@ func resolveWriteTarget(path string) string {
 // Copy copies a file or directory.
 func (f *FileModule) Copy(src, dest string) (string, error) {
 	if src == "" || dest == "" {
-		return "", fmt.Errorf("src and dest are required")
+		return "", invalidf("src and dest are required")
 	}
 	// Guard against copying a file onto itself, which would truncate the
 	// source when the destination is opened with O_TRUNC.
@@ -564,7 +572,7 @@ func (f *FileModule) Copy(src, dest string) (string, error) {
 		if as, e1 := filepath.Abs(src); e1 == nil {
 			if ad, e2 := filepath.Abs(dest); e2 == nil {
 				if isSubPath(as, ad) || isSubPath(ad, as) {
-					return "", fmt.Errorf("cannot copy a directory into itself or a parent/child path: %s -> %s", src, dest)
+					return "", invalidf("cannot copy a directory into itself or a parent/child path: %s -> %s", src, dest)
 				}
 			}
 		}
@@ -585,7 +593,7 @@ func (f *FileModule) Copy(src, dest string) (string, error) {
 // Move moves a file or directory.
 func (f *FileModule) Move(src, dest string) (string, error) {
 	if src == "" || dest == "" {
-		return "", fmt.Errorf("src and dest are required")
+		return "", invalidf("src and dest are required")
 	}
 	if _, err := os.Stat(src); err != nil {
 		return "", err
@@ -640,7 +648,7 @@ func (f *FileModule) Dispatch(action string, params map[string]any) (string, err
 	case "move":
 		return f.Move(command.String(params["src"]), command.String(params["dest"]))
 	}
-	return "", fmt.Errorf("unknown file action: %s", action)
+	return "", invalidf("unknown file action: %s", action)
 }
 
 func toInt(v any) int {

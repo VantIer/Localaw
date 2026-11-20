@@ -23,7 +23,7 @@ func newTestServer(t *testing.T) *Server {
 	file := local.NewFileModule()
 	q := local.NewQueue(local.NewExecutor(file), 8, 5*time.Second)
 	t.Cleanup(q.Close)
-	eng := engine.New(cfg, q)
+	eng := engine.NewWithMCP(cfg, q, nil)
 	return New(cfg, eng, file)
 }
 
@@ -53,6 +53,17 @@ func TestConfigEndpoint(t *testing.T) {
 	}
 	if _, ok := out["auth_mode"]; !ok {
 		t.Fatalf("auth_mode missing: %s", w.Body.String())
+	}
+}
+
+func TestMCPServersEndpointEmpty(t *testing.T) {
+	s := newTestServer(t)
+	w := do(t, s, http.MethodGet, "/api/mcp/servers", "")
+	if w.Code != 200 {
+		t.Fatalf("status = %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"servers":[]`) {
+		t.Fatalf("unexpected body: %s", w.Body.String())
 	}
 }
 
@@ -177,6 +188,125 @@ func TestOriginGuardPortMismatch(t *testing.T) {
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("loopback alias with a different port status = %d, want 403", w.Code)
+	}
+}
+
+func TestNewSessionRejectsInvalidJSON(t *testing.T) {
+	s := newTestServer(t)
+	w := do(t, s, http.MethodPost, "/api/sessions/new", `{`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid JSON status = %d, want 400", w.Code)
+	}
+}
+
+func TestUnknownSessionEndpoints(t *testing.T) {
+	s := newTestServer(t)
+	cases := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodGet, "/api/history?session_id=missing", ""},
+		{http.MethodGet, "/api/chat-stream?session_id=missing", ""},
+		{http.MethodPost, "/api/sessions/close", `{"session_id":"missing"}`},
+		{http.MethodPost, "/api/send", `{"session_id":"missing","message":"hi"}`},
+		{http.MethodPost, "/api/authorize-execute", `{"session_id":"missing","authorized":true}`},
+		{http.MethodPost, "/api/stop", `{"session_id":"missing"}`},
+		{http.MethodPost, "/api/reset", `{"session_id":"missing"}`},
+	}
+	for _, tc := range cases {
+		w := do(t, s, tc.method, tc.path, tc.body)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("%s %s: status = %d, want 404: %s", tc.method, tc.path, w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"err"`) {
+			t.Fatalf("%s %s: missing err field: %s", tc.method, tc.path, w.Body.String())
+		}
+	}
+}
+
+func TestParameterValidationUses400(t *testing.T) {
+	s := newTestServer(t)
+	cases := []struct {
+		path string
+		body string
+	}{
+		{"/api/files/new", `{"filename":" "}`},
+		{"/api/files/mkdir", `{"dirname":""}`},
+		{"/api/files/chdir", `{"dirname":" "}`},
+		{"/api/exec-cmd", `{"command":"  "}`},
+	}
+	for _, tc := range cases {
+		w := do(t, s, http.MethodPost, tc.path, tc.body)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want 400: %s", tc.path, w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"err"`) {
+			t.Fatalf("%s: missing err field: %s", tc.path, w.Body.String())
+		}
+	}
+}
+
+func TestFileAPIClassifiesErrors(t *testing.T) {
+	s := newTestServer(t)
+	dir := t.TempDir()
+	s.setDir(dir)
+	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "plain.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if w := do(t, s, http.MethodPost, "/api/files/new", `{"filename":"subdir"}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("new over directory status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	if w := do(t, s, http.MethodPost, "/api/files/mkdir", `{"dirname":"plain.txt"}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("mkdir over file status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	if w := do(t, s, http.MethodPost, "/api/files/chdir", `{"dirname":"plain.txt"}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("chdir to file status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	if w := do(t, s, http.MethodGet, "/api/files/download?path=subdir", ""); w.Code != http.StatusBadRequest {
+		t.Fatalf("download directory status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+
+	s.setDir(filepath.Join(dir, "does-not-exist"))
+	if w := do(t, s, http.MethodGet, "/api/files/list", ""); w.Code != http.StatusNotFound {
+		t.Fatalf("list missing directory status = %d, want 404: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestFileAPIFindsMissingPath(t *testing.T) {
+	s := newTestServer(t)
+	s.setDir(t.TempDir())
+	w := do(t, s, http.MethodPost, "/api/files/delete", `{"path":"does-not-exist"}`)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("delete missing status = %d, want 404: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"err"`) {
+		t.Fatalf("missing err field: %s", w.Body.String())
+	}
+}
+
+func TestFileOpsRejectEmptyPaths(t *testing.T) {
+	s := newTestServer(t)
+	cases := []struct {
+		path string
+		body string
+	}{
+		{"/api/files/delete", `{"path":""}`},
+		{"/api/files/delete", `{"path":"  "}`},
+		{"/api/files/copy", `{"src":"","dest":"x"}`},
+		{"/api/files/copy", `{"src":"x","dest":""}`},
+		{"/api/files/move", `{"src":"","dest":"x"}`},
+		{"/api/files/move", `{"src":"x","dest":""}`},
+	}
+	for _, tc := range cases {
+		w := do(t, s, http.MethodPost, tc.path, tc.body)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s %s: status = %d, want 400: %s", tc.path, tc.body, w.Code, w.Body.String())
+		}
 	}
 }
 

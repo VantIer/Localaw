@@ -16,7 +16,7 @@ func newTestCLI(t *testing.T) *CLI {
 	cfg := config.Default()
 	q := local.NewQueue(local.NewExecutor(local.NewFileModule()), 4, time.Second)
 	t.Cleanup(q.Close)
-	eng := engine.New(cfg, q)
+	eng := engine.NewWithMCP(cfg, q, nil)
 	return &CLI{cfg: cfg, eng: eng, reader: bufio.NewReader(strings.NewReader(""))}
 }
 

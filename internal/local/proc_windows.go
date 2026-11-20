@@ -6,10 +6,11 @@ import (
 	"context"
 	"errors"
 	"os/exec"
-	"strconv"
 	"syscall"
 	"unicode/utf8"
 	"unsafe"
+
+	"localaw/internal/procutil"
 )
 
 const (
@@ -27,19 +28,8 @@ const (
 func shellCommand(ctx context.Context, command string) *exec.Cmd {
 	c := exec.CommandContext(ctx, "cmd.exe")
 	c.SysProcAttr = &syscall.SysProcAttr{CmdLine: "cmd.exe /c " + command}
+	procutil.Prepare(c)
 	return c
-}
-
-// killTree terminates the command's whole process tree: CommandContext alone
-// only kills cmd.exe, leaving children running with the inherited stdout pipe
-// open.
-func killTree(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return nil
-	}
-	pid := cmd.Process.Pid
-	_ = exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(pid)).Run()
-	return cmd.Process.Kill()
 }
 
 func isCrossDeviceError(err error) bool {

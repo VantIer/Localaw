@@ -24,6 +24,10 @@ const (
 type PendingCommand struct {
 	Action string         `json:"action"`
 	Params map[string]any `json:"params"`
+	Source string         `json:"source,omitempty"` // builtin | mcp
+	Server string         `json:"server,omitempty"`
+	Tool   string         `json:"tool,omitempty"`
+	Title  string         `json:"title,omitempty"`
 }
 
 // TranscriptEntry is one displayable line of a session's conversation.
@@ -161,7 +165,7 @@ func (e *Engine) persistPartial(s *Session) {
 func (e *Engine) markStopped(s *Session) {
 	e.persistPartial(s)
 	s.addTranscript("system", "[Stopped by user]")
-	e.publishNow(s, Event{"type": "stopped"})
+	e.publishNow(s, Event{"type": EventStopped})
 }
 
 // runConversation executes the tool-calling loop for one user message. The user
@@ -185,16 +189,16 @@ func (e *Engine) runConversation(s *Session) {
 		ctx := s.runCtx
 		s.mu.Unlock()
 
-		e.publishNow(s, Event{"type": "answering"})
+		e.publishNow(s, Event{"type": EventAnswering})
 
 		msgs := e.buildMessages(s, system)
-		res, err := e.llm.Chat(ctx, msgs, e.tools, func(chunk string) {
+		res, err := e.llm.Chat(ctx, msgs, e.reg.OpenAITools(), func(chunk string) {
 			s.mu.Lock()
 			s.text += chunk
 			s.seq++
 			seq := s.seq
 			s.mu.Unlock()
-			e.publish(s, seq, Event{"type": "chunk", "content": chunk})
+			e.publish(s, seq, Event{"type": EventChunk, "content": chunk})
 		})
 		if err != nil {
 			if s.isStopped() {
@@ -203,7 +207,7 @@ func (e *Engine) runConversation(s *Session) {
 			}
 			e.persistPartial(s)
 			seq := s.addTranscript("system", "[LLM Error] "+err.Error())
-			e.publish(s, seq, Event{"type": "llm_error", "error": err.Error()})
+			e.publish(s, seq, Event{"type": EventLLMError, "error": err.Error()})
 			return
 		}
 
@@ -218,7 +222,7 @@ func (e *Engine) runConversation(s *Session) {
 		if len(res.ToolCalls) == 0 {
 			break
 		}
-		e.publishNow(s, Event{"type": "response_done"})
+		e.publishNow(s, Event{"type": EventResponseDone})
 
 		denied := false
 		for i, tc := range res.ToolCalls {
@@ -234,30 +238,31 @@ func (e *Engine) runConversation(s *Session) {
 			if perr != nil {
 				msg := "Error: invalid arguments: " + perr.Error()
 				seq := e.appendTool(s, tc.ID, action, params, msg)
-				e.publish(s, seq, Event{"type": "execution_done", "action": action, "params": params, "result": msg})
+				e.publish(s, seq, e.toolEvent(action, Event{"type": EventExecutionDone, "action": action, "params": params, "result": msg}))
 				continue
 			}
-			if _, known := command.SpecByName(action); !known {
+			def, known := e.reg.Get(action)
+			if !known {
 				msg := "Error: unknown action: " + action
 				seq := e.appendTool(s, tc.ID, action, params, msg)
-				e.publish(s, seq, Event{"type": "execution_done", "action": action, "params": params, "result": msg})
+				e.publish(s, seq, e.toolEvent(action, Event{"type": EventExecutionDone, "action": action, "params": params, "result": msg}))
 				continue
 			}
 			if !command.CheckSafety(action, params) {
 				msg := "Error: blocked by safety check"
 				seq := e.appendTool(s, tc.ID, action, params, msg)
-				e.publish(s, seq, Event{"type": "execution_done", "action": action, "params": params, "result": msg})
+				e.publish(s, seq, e.toolEvent(action, Event{"type": EventExecutionDone, "action": action, "params": params, "result": msg}))
 				continue
 			}
 
 			if e.RequiresAuth(action) {
 				authCh := make(chan bool, 1)
 				s.mu.Lock()
-				s.pending = &PendingCommand{Action: action, Params: params}
+				s.pending = e.pendingFor(action, params)
 				s.phase = PhaseAuthWait
 				s.authCh = authCh
 				s.mu.Unlock()
-				e.publishNow(s, Event{"type": "auth_required", "action": action, "params": params})
+				e.publishNow(s, e.toolEvent(action, Event{"type": EventAuthRequired, "action": action, "params": params}))
 				ok := e.awaitAuth(s, authCh)
 				s.mu.Lock()
 				s.pending = nil
@@ -275,11 +280,11 @@ func (e *Engine) runConversation(s *Session) {
 				if !ok {
 					const deniedMsg = "Error: user denied command execution (not executed)"
 					e.appendToolRaw(s, tc.ID, deniedMsg)
-					seq := s.addTranscript("system", "Denied: "+action+" (not executed)")
+					seq := s.addTranscript("system", "Denied: "+e.displayName(action)+" (not executed)")
 					for _, rest := range res.ToolCalls[i+1:] {
 						e.appendToolRaw(s, rest.ID, "Error: skipped because a previous command was denied")
 					}
-					e.publish(s, seq, Event{"type": "execution_denied", "action": action, "params": params})
+					e.publish(s, seq, e.toolEvent(action, Event{"type": EventExecutionDenied, "action": action, "params": params}))
 					denied = true
 					break
 				}
@@ -289,9 +294,10 @@ func (e *Engine) runConversation(s *Session) {
 			s.mu.Lock()
 			s.phase = PhaseExec
 			s.mu.Unlock()
-			e.publishNow(s, Event{"type": "executing", "action": action, "params": params})
+			e.publishNow(s, e.toolEvent(action, Event{"type": EventExecuting, "action": action, "params": params}))
 
 			job := local.NewJob(ctx, action, params, s.ID)
+			job.Timeout = time.Duration(def.Timeout) * time.Second
 			s.mu.Lock()
 			s.job = job
 			s.mu.Unlock()
@@ -316,11 +322,11 @@ func (e *Engine) runConversation(s *Session) {
 				for _, rest := range res.ToolCalls[i+1:] {
 					e.appendToolRaw(s, rest.ID, "Error: skipped because a previous command failed")
 				}
-				e.publish(s, seq, Event{"type": "execution_error", "action": action, "params": params, "error": jerr.Error()})
+				e.publish(s, seq, e.toolEvent(action, Event{"type": EventExecutionError, "action": action, "params": params, "error": jerr.Error()}))
 				return
 			}
 			seq := e.appendTool(s, tc.ID, action, params, out)
-			e.publish(s, seq, Event{"type": "execution_done", "action": action, "params": params, "result": out})
+			e.publish(s, seq, e.toolEvent(action, Event{"type": EventExecutionDone, "action": action, "params": params, "result": out}))
 		}
 		if denied {
 			break
@@ -354,10 +360,10 @@ func (e *Engine) finish(s *Session) {
 	}
 	s.mu.Unlock()
 	if running {
-		e.publishNow(s, Event{"type": "done"})
+		e.publishNow(s, Event{"type": EventDone})
 	}
 	if pendingReset {
-		e.publishNow(s, Event{"type": "reset"})
+		e.publishNow(s, Event{"type": EventReset})
 	}
 	if runDone != nil {
 		close(runDone)
@@ -372,25 +378,12 @@ func (e *Engine) buildMessages(s *Session, system string) []llm.Message {
 	return msgs
 }
 
-// actionDetail renders the parameter detail shown next to an action's name.
-func actionDetail(params map[string]any) string {
-	if v, ok := params["command"].(string); ok && v != "" {
-		return " [" + v + "]"
-	}
-	if v, ok := params["path"].(string); ok && v != "" {
-		return " [" + v + "]"
-	}
-	if v, ok := params["src"].(string); ok && v != "" {
-		return " [" + v + "]"
-	}
-	return ""
-}
-
-func (e *Engine) appendTool(s *Session, id, label string, params map[string]any, content string) uint64 {
+func (e *Engine) appendTool(s *Session, id, action string, params map[string]any, content string) uint64 {
 	if content == "" {
 		content = "(no output)"
 	}
-	text := "[" + label + "]" + actionDetail(params) + "\n" + content
+	label := e.displayName(action)
+	text := "[" + label + "]" + actionDetail(action, params) + "\n" + content
 	s.mu.Lock()
 	s.history = append(s.history, llm.ToolMessage(content, id))
 	s.transcript = append(s.transcript, TranscriptEntry{Role: "result", Text: text})

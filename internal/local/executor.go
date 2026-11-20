@@ -7,16 +7,31 @@ import (
 	"time"
 
 	"localaw/internal/command"
+	"localaw/internal/procutil"
+	"localaw/internal/toolname"
 )
+
+// MCPCaller is the subset of the MCP host used by the executor. Keeping it as
+// an interface avoids a dependency from local to the MCP implementation.
+type MCPCaller interface {
+	Has(name string) bool
+	Call(ctx context.Context, name string, args map[string]any) (string, error)
+}
 
 // Executor runs a single action on the local machine.
 type Executor struct {
 	file *FileModule
+	mcp  MCPCaller
 }
 
-// NewExecutor creates an executor bound to a file module.
-func NewExecutor(file *FileModule) *Executor {
-	return &Executor{file: file}
+// NewExecutor creates an executor bound to a file module, optionally with an
+// MCP host for namespaced MCP tools.
+func NewExecutor(file *FileModule, mcp ...MCPCaller) *Executor {
+	e := &Executor{file: file}
+	if len(mcp) > 0 {
+		e.mcp = mcp[0]
+	}
+	return e
 }
 
 // Execute runs an action. Business failures (missing file, bad parameters, ...)
@@ -24,6 +39,15 @@ func NewExecutor(file *FileModule) *Executor {
 // be fed back to the model as a normal tool result. A non-nil error is only
 // returned for transport/cancellation failures.
 func (e *Executor) Execute(ctx context.Context, action string, params map[string]any) (string, error) {
+	if toolname.IsExposed(action) {
+		if e.mcp == nil {
+			return "Error: MCP is not enabled", nil
+		}
+		if !e.mcp.Has(action) {
+			return "Error: MCP tool is no longer available: " + action, nil
+		}
+		return e.mcp.Call(ctx, action, params)
+	}
 	if action == "exec_cmd" {
 		return e.runShell(ctx, command.String(params["command"]))
 	}
@@ -40,7 +64,7 @@ func (e *Executor) runShell(ctx context.Context, shellCmd string) (string, error
 	}
 	cmd := shellCommand(ctx, shellCmd)
 	// Kill the whole process tree (not just the shell) on timeout / stop.
-	cmd.Cancel = func() error { return killTree(cmd) }
+	cmd.Cancel = func() error { return procutil.KillTree(cmd) }
 	cmd.WaitDelay = 5 * time.Second
 
 	var buf bytes.Buffer

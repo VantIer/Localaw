@@ -8,8 +8,6 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
-
-	"localaw/internal/command"
 )
 
 // Message is the message union used in a chat request.
@@ -226,32 +224,4 @@ func (c *Client) buildResult(content string, calls []ToolCall) *ChatResult {
 		ToolCalls: calls,
 		Raw:       AssistantMessage(content, calls),
 	}
-}
-
-// BuildTools generates the OpenAI tool schema from the command table.
-func BuildTools() []openai.ChatCompletionToolParam {
-	specs := command.All()
-	out := make([]openai.ChatCompletionToolParam, 0, len(specs))
-	for _, s := range specs {
-		props := map[string]any{}
-		var required []string
-		for _, p := range s.Params {
-			props[p.Name] = map[string]any{"type": "string", "description": p.Description}
-			if p.Required {
-				required = append(required, p.Name)
-			}
-		}
-		schema := map[string]any{"type": "object", "properties": props}
-		if len(required) > 0 {
-			schema["required"] = required
-		}
-		out = append(out, openai.ChatCompletionToolParam{
-			Function: openai.FunctionDefinitionParam{
-				Name:        s.Name,
-				Description: openai.String(s.Description),
-				Parameters:  openai.FunctionParameters(schema),
-			},
-		})
-	}
-	return out
 }

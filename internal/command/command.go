@@ -121,6 +121,25 @@ var specs = []Spec{
 	},
 }
 
+// Schema renders the JSON Schema object used for this action's OpenAI tool
+// parameters. It is shared by the built-in tool builder and the unified
+// registry so both stay in sync.
+func Schema(s Spec) map[string]any {
+	props := make(map[string]any, len(s.Params))
+	required := make([]string, 0, len(s.Params))
+	for _, p := range s.Params {
+		props[p.Name] = map[string]any{"type": "string", "description": p.Description}
+		if p.Required {
+			required = append(required, p.Name)
+		}
+	}
+	schema := map[string]any{"type": "object", "properties": props}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
+}
+
 // All returns a deep copy of every action spec. Mutating the returned slice or
 // any nested parameter does not affect the command table.
 func All() []Spec {
@@ -136,34 +155,14 @@ func All() []Spec {
 	return out
 }
 
-var byName = map[string]Spec{}
-
-func init() {
-	for _, s := range specs {
-		byName[s.Name] = s
-	}
-}
-
-// SpecByName returns the spec for an action.
-func SpecByName(name string) (Spec, bool) {
-	s, ok := byName[name]
-	return s, ok
-}
-
-// IsLowRisk reports whether an action is read-only / listing.
-func IsLowRisk(name string) bool {
-	s, ok := byName[name]
-	return ok && s.LowRisk
-}
-
-// RequiresAuth decides whether an action needs explicit user authorization
-// under the given auth_mode (0=N-Auto, 1=H-Auto, 2=F-Auto).
-func RequiresAuth(mode int, name string) bool {
+// RequiresAuthRisk is the single implementation of the three authorization
+// modes. Dynamic tool registries should use this with their resolved risk flag.
+func RequiresAuthRisk(mode int, lowRisk bool) bool {
 	switch mode {
 	case 2:
 		return false
 	case 1:
-		return !IsLowRisk(name)
+		return !lowRisk
 	default:
 		return true
 	}

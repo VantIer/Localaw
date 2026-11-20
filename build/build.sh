@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build Localaw for every supported target. Fully static, CGO disabled,
-# zero external runtime dependencies. Requires Go 1.22+.
+# zero external runtime dependencies. Requires Go 1.25+.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,3 +21,5 @@ build windows 386   .exe
 build linux   amd64
 build linux   386
 build linux   arm64
+build darwin  amd64
+build darwin  arm64

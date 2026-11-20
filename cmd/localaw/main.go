@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 	"localaw/internal/config"
 	"localaw/internal/engine"
 	"localaw/internal/local"
+	"localaw/internal/mcphost"
 	"localaw/internal/web"
 )
 
@@ -31,14 +33,24 @@ func main() {
 		logger.Fatalf("config: %v", err)
 	}
 
-	cmdTimeout := time.Duration(cfg.Policy.CmdTimeout) * time.Second
-	file := local.NewFileModule()
-	runner := local.NewExecutor(file)
-	queue := local.NewQueue(runner, cfg.Policy.QueueCapacity, cmdTimeout)
-	eng := engine.New(cfg, queue)
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	cmdTimeout := time.Duration(cfg.Policy.CmdTimeout) * time.Second
+	file := local.NewFileModule()
+
+	mcpLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	mcpHost := mcphost.NewManager(cfg.MCP, mcpLogger)
+	mcpHost.Start(ctx)
+
+	runner := local.NewExecutor(file, mcpHost)
+	queue := local.NewQueue(runner, cfg.Policy.QueueCapacity, cmdTimeout)
+	eng := engine.NewWithMCP(cfg, queue, mcpHost)
+	defer func() {
+		eng.Close()
+		queue.Close()
+		mcpHost.Close()
+	}()
 
 	switch *mode {
 	case "cli":
@@ -60,6 +72,9 @@ func main() {
 		select {
 		case <-ctx.Done():
 			logger.Printf("interrupt received; shutting down")
+			// Close sessions and SSE subscribers before waiting for HTTP shutdown,
+			// otherwise long-lived chat streams can delay Shutdown to its deadline.
+			eng.Close()
 			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			_ = srv.Shutdown(shutCtx)
 			cancel()
@@ -71,6 +86,4 @@ func main() {
 	default:
 		logger.Fatalf("unknown mode %q (use cli|web)", *mode)
 	}
-
-	queue.Close()
 }

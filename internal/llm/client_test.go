@@ -1,36 +1,30 @@
 package llm
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
-
-	"localaw/internal/command"
 )
 
-func TestBuildToolsMatchesSpecs(t *testing.T) {
-	tools := BuildTools()
-	if len(tools) != len(command.All()) {
-		t.Fatalf("tool count = %d, want %d", len(tools), len(command.All()))
-	}
-	var write *struct {
-		desc  string
-		props map[string]any
-	}
-	for _, tl := range tools {
-		if tl.Function.Name == "write_file" {
-			write = &struct {
-				desc  string
-				props map[string]any
-			}{desc: tl.Function.Description.Value, props: tl.Function.Parameters}
+func TestClientChatOnce(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			http.NotFound(w, r)
+			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"x","object":"chat.completion","created":1,"model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}]}`))
+	}))
+	defer ts.Close()
+
+	c := New(ts.URL, "key", "m", 0.2, false)
+	res, err := c.Chat(context.Background(), []Message{UserMessage("hi")}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if write == nil {
-		t.Fatal("write_file tool missing")
-	}
-	if write.desc == "" {
-		t.Fatal("write_file tool has no description")
-	}
-	if _, ok := write.props["properties"]; !ok {
-		t.Fatal("write_file tool has no properties")
+	if res.Content != "hello" {
+		t.Fatalf("content = %q", res.Content)
 	}
 }
 

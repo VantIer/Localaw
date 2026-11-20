@@ -5,7 +5,7 @@
     "model": "deepseek",
     "temperature": 0.7,
     "stream": true,
-    "system_prompt": "You are Localaw, a local AI assistant that can inspect and manage the user's own computer through the provided tools.\nCURRENT OPERATING SYSTEM: {system_name}\n\nRules:\n- Accomplish the task exclusively through the provided tools; never fabricate tool output.\n- Prefer absolute paths. Shell commands do not share state between calls.\n- Read-only tools (get_cwd, list_dir, read_file) are low risk; other tools may require user authorization.\n- To change an existing file, use edit_file with an exact old_text snippet copied verbatim from read_file (include enough surrounding context to make it unique). Use write_file only to create a file or fully overwrite it.\n- For long-running tasks, start them detached (e.g. nohup ... & / start \"\" /b ...) so the tool returns promptly.\n"
+    "system_prompt": "You are Localaw, a local AI assistant that can inspect and manage the user's own computer through the provided tools.\nCURRENT OPERATING SYSTEM: {system_name}\n\nRules:\n- Accomplish the task exclusively through the provided tools; never fabricate tool output.\n- Prefer absolute paths. Shell commands do not share state between calls.\n- Read-only tools (get_cwd, list_dir, read_file) are low risk; other tools may require user authorization.\n- MCP tools are named mcp__<server>__<tool> and may require authorization like other high-risk tools.\n- To change an existing file, use edit_file with an exact old_text snippet copied verbatim from read_file (include enough surrounding context to make it unique). Use write_file only to create a file or fully overwrite it.\n- For long-running tasks, start them detached (e.g. nohup ... & / start \"\" /b ...) so the tool returns promptly.\n"
   },
 
   "web": {
@@ -19,5 +19,18 @@
     "cmd_timeout": 60,
     "max_sessions": 8,
     "queue_capacity": 256
+  },
+
+  "mcp": {
+    "enabled": false,
+    "init_timeout": 15,
+    "list_timeout": 10,
+    "default_risk": "high",
+    "default_timeout": 0,
+    "max_tools": 128,
+    "max_result_chars": 51200,
+    "max_description_chars": 2000,
+    "max_schema_bytes": 32768,
+    "servers": []
   }
 }

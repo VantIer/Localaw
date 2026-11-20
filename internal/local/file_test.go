@@ -104,6 +104,36 @@ func TestReadFileRangeValidation(t *testing.T) {
 	}
 }
 
+func TestReadFileWholeFileLimit(t *testing.T) {
+	dir := t.TempDir()
+	f := NewFileModule()
+
+	exact := strings.Repeat("x", readFileLimit)
+	exactPath := filepath.Join(dir, "exact.txt")
+	if err := os.WriteFile(exactPath, []byte(exact), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := f.ReadFile(exactPath, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != exact {
+		t.Fatalf("a file with exactly %d runes must not be marked truncated", readFileLimit)
+	}
+
+	longPath := filepath.Join(dir, "long.txt")
+	if err := os.WriteFile(longPath, []byte(exact+"tail"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err = f.ReadFile(longPath, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out, exact) || !strings.Contains(out, "[Output truncated at 51200 characters") {
+		t.Fatalf("expected a truncation marker, got %d bytes", len(out))
+	}
+}
+
 func TestEditFileExactReplace(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "edit.txt")
 	f := NewFileModule()

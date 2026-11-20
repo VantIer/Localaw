@@ -578,6 +578,53 @@
             line-height: 1.5;
             color: var(--text-muted);
         }
+        .mcp-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .mcp-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-base);
+        }
+        .mcp-dot {
+            width: 8px;
+            height: 8px;
+            margin-top: 5px;
+            border-radius: 50%;
+            background: var(--text-faint);
+            flex: 0 0 auto;
+        }
+        .mcp-dot.ready { background: var(--success); }
+        .mcp-dot.warning { background: var(--warning); }
+        .mcp-dot.failed { background: var(--danger); }
+        .mcp-info {
+            min-width: 0;
+            flex: 1;
+        }
+        .mcp-name {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .mcp-meta {
+            margin-top: 2px;
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            overflow-wrap: anywhere;
+        }
+        .mcp-empty {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+        }
 
         .command-panel {
             display: none;
@@ -1183,6 +1230,13 @@
             </div>
 
             <div class="sidebar-section">
+                <h3>MCP Servers</h3>
+                <div class="mcp-list" id="mcpList">
+                    <div class="mcp-empty">No MCP servers configured.</div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
                 <h3>Session</h3>
                 <button class="btn btn-danger btn-block" id="resetBtn">Reset Conversation</button>
             </div>
@@ -1221,6 +1275,7 @@
         const sendBtn = document.getElementById('sendBtn');
         const cmdModal = document.getElementById('cmdModal');
         const modalCommands = document.getElementById('modalCommands');
+        const mcpList = document.getElementById('mcpList');
         const authSegmented = document.getElementById('authSegmented');
         const authThumb = document.getElementById('authThumb');
         const authSegs = Array.from(authSegmented.querySelectorAll('.auth-seg'));
@@ -1300,6 +1355,42 @@
                 updateAuthUI(config.auth_mode);
             } catch (e) {}
             await loadSessions();
+        }
+
+        async function loadMCPStatus() {
+            if (!mcpList) return;
+            try {
+                const data = await getJSON('/api/mcp/servers');
+                const servers = data.servers || [];
+                if (!servers.length) {
+                    mcpList.innerHTML = '<div class="mcp-empty">No MCP servers configured.</div>';
+                    return;
+                }
+                mcpList.innerHTML = '';
+                for (const s of servers) {
+                    const item = document.createElement('div');
+                    item.className = 'mcp-item';
+                    const dot = document.createElement('span');
+                    const state = String(s.state || 'unknown');
+                    dot.className = 'mcp-dot' + (state === 'ready' ? ' ready' : (state === 'failed' || state === 'closed') ? ' failed' : ' warning');
+                    const info = document.createElement('div');
+                    info.className = 'mcp-info';
+                    const name = document.createElement('div');
+                    name.className = 'mcp-name';
+                    name.textContent = s.name || '(unnamed)';
+                    const meta = document.createElement('div');
+                    meta.className = 'mcp-meta';
+                    const bits = [s.transport || '', state, `${s.tools || 0} tool(s)`];
+                    if (s.protocol) bits.push(s.protocol);
+                    meta.textContent = bits.filter(Boolean).join(' · ');
+                    if (s.error) meta.textContent += ` — ${s.error}`;
+                    info.append(name, meta);
+                    item.append(dot, info);
+                    mcpList.appendChild(item);
+                }
+            } catch (e) {
+                mcpList.innerHTML = '<div class="mcp-empty">MCP status unavailable.</div>';
+            }
         }
 
         // ---------- chat rendering ----------
@@ -1488,6 +1579,10 @@
             es.onerror = () => { /* browser auto-reconnects */ };
         }
 
+        function eventToolLabel(ev) {
+            return ev.display || ev.action || '';
+        }
+
         function handleEvent(ev) {
             if (typeof ev.seq === 'number') {
                 if (ev.seq <= appliedSeq) return;
@@ -1499,7 +1594,7 @@
                         appliedSeq = ev.snapshot.seq || 0;
                         renderSnapshot(ev.snapshot);
                         if (ev.snapshot.running) { conversationActive = true; setSendButtonStop(); setTyping('AI is thinking...', true); }
-                        if (ev.snapshot.pending) showCommandModal(ev.snapshot.pending.action, ev.snapshot.pending.params); else hideAuth();
+                        if (ev.snapshot.pending) showCommandModal(ev.snapshot.pending.action, ev.snapshot.pending.params, ev.snapshot.pending); else hideAuth();
                     }
                     break;
                 case 'idle':
@@ -1517,7 +1612,7 @@
                     setTyping('', false); break;
                 case 'auth_required':
                     setTyping('', false);
-                    showCommandModal(ev.action, ev.params);
+                    showCommandModal(ev.action, ev.params, ev);
                     break;
                 case 'executing':
                     setTyping('Executing...', true); break;
@@ -1525,19 +1620,19 @@
                     setTyping('', false); aiSpan = null; hideAuth();
                     const p = ev.params || {};
                     const detail = p.command ? ` [${p.command}]` : (p.path ? ` [${p.path}]` : (p.src ? ` [${p.src}]` : ''));
-                    addMessage(`[${ev.action}]${detail}\n${ev.result}`, 'system');
+                    addMessage(`[${eventToolLabel(ev)}]${detail}\n${ev.result}`, 'system');
                     break;
                 }
                 case 'execution_error': {
                     setTyping('', false); aiSpan = null; hideAuth();
                     const p = ev.params || {};
                     const detail = p.command ? ` [${p.command}]` : (p.path ? ` [${p.path}]` : '');
-                    addMessage(`[${ev.action}]${detail}\nError: ${ev.error}`, 'system');
+                    addMessage(`[${eventToolLabel(ev)}]${detail}\nError: ${ev.error}`, 'system');
                     break;
                 }
                 case 'execution_denied':
                     setTyping('', false); aiSpan = null; hideAuth();
-                    addMessage(`Denied: ${ev.action} (not executed)`, 'system');
+                    addMessage(`Denied: ${eventToolLabel(ev)} (not executed)`, 'system');
                     break;
                 case 'stopped':
                     setTyping('', false); aiSpan = null; hideAuth();
@@ -1554,6 +1649,7 @@
                 case 'done':
                     conversationActive = false; setSendButtonIdle(); setTyping('', false); hideAuth();
                     loadSessions();
+                    loadMCPStatus();
                     break;
                 case 'reset':
                     // A reset that was scheduled while a task was finishing has
@@ -1606,7 +1702,7 @@
         messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !conversationActive) sendMessage(); });
 
         // ---------- auth modal ----------
-        function showCommandModal(action, params) {
+        function showCommandModal(action, params, meta) {
             modalCommands.innerHTML = '';
             const item = document.createElement('div');
             item.className = 'modal-cmd-item';
@@ -1614,11 +1710,22 @@
             info.className = 'cmd-info';
             const a = document.createElement('div');
             a.className = 'cmd-action';
-            a.textContent = String(action || '');
+            if (meta && meta.server) {
+                a.textContent = `MCP · ${meta.server} / ${meta.tool || action}`;
+            } else {
+                a.textContent = String(action || '');
+            }
             const p = document.createElement('div');
             p.className = 'cmd-params';
             p.textContent = JSON.stringify(params || {}, null, 2);
-            info.append(a, p);
+            if (meta && meta.title) {
+                const t = document.createElement('div');
+                t.className = 'cmd-params';
+                t.textContent = String(meta.title);
+                info.append(a, t, p);
+            } else {
+                info.append(a, p);
+            }
             item.appendChild(info);
             modalCommands.appendChild(item);
             cmdModal.classList.add('show');
@@ -1934,6 +2041,8 @@
         (async function init() {
             setSendButtonIdle();
             await loadConfig();
+            await loadMCPStatus();
+            setInterval(loadMCPStatus, 10000);
         })();
 
     </script>

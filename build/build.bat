@@ -1,6 +1,6 @@
 @echo off
 REM Build Localaw for every supported target. Fully static, CGO disabled,
-REM zero external runtime dependencies. Requires Go 1.22+.
+REM zero external runtime dependencies. Requires Go 1.25+.
 setlocal
 cd /d "%~dp0.."
 
@@ -14,6 +14,8 @@ call :build windows 386   .exe
 call :build linux   amd64
 call :build linux   386
 call :build linux   arm64
+call :build darwin  amd64
+call :build darwin  arm64
 goto :eof
 
 :build

@@ -54,7 +54,7 @@ func newTestEngine(t *testing.T, authMode int, path string) (*Engine, *local.Que
 	cfg.Policy.AuthMode = authMode
 	cfg.Policy.CmdTimeout = 5
 	q := local.NewQueue(local.NewExecutor(local.NewFileModule()), 8, 5*time.Second)
-	return NewWithClient(cfg, q, &fakeLLM{path: path}), q
+	return newWithClient(cfg, q, &fakeLLM{path: path}), q
 }
 
 func waitIdle(t *testing.T, s *Session) {
@@ -155,7 +155,7 @@ func TestEngineStopDuringExecution(t *testing.T) {
 	cfg.Policy.AuthMode = 2
 	cfg.Policy.CmdTimeout = 30
 	q := local.NewQueue(local.NewExecutor(local.NewFileModule()), 8, 30*time.Second)
-	eng := NewWithClient(cfg, q, &execLLM{cmd: cmd})
+	eng := newWithClient(cfg, q, &execLLM{cmd: cmd})
 	defer q.Close()
 
 	s, err := eng.NewSession("test")
@@ -270,7 +270,7 @@ func newSeqEngine(t *testing.T, authMode int, client *seqLLM, timeout time.Durat
 	cfg.Policy.AuthMode = authMode
 	cfg.Policy.CmdTimeout = int(timeout / time.Second)
 	q := local.NewQueue(local.NewExecutor(local.NewFileModule()), 8, timeout)
-	return NewWithClient(cfg, q, client), q
+	return newWithClient(cfg, q, client), q
 }
 
 func TestEngineUnknownAction(t *testing.T) {
@@ -326,7 +326,7 @@ func TestEngineRoundLimit(t *testing.T) {
 		{calls: []llm.ToolCall{{ID: "c1", Name: "get_cwd"}}},
 	}}
 	q := local.NewQueue(local.NewExecutor(local.NewFileModule()), 8, 5*time.Second)
-	eng := NewWithClient(cfg, q, client)
+	eng := newWithClient(cfg, q, client)
 	defer q.Close()
 	s, _ := eng.NewSession("t")
 	if err := eng.BeginChat(s.ID, "go"); err != nil {

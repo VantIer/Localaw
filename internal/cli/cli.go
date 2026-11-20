@@ -55,6 +55,16 @@ func (c *CLI) banner() {
 	fmt.Printf("model: %s\n", c.cfg.LLM.Model)
 	fmt.Printf("auth mode: %d   round limit: %d   cmd timeout: %ds\n",
 		c.eng.AuthMode(), c.cfg.Policy.RoundLimit, c.cfg.Policy.CmdTimeout)
+	if st := c.eng.MCPStatus(); len(st) > 0 {
+		ready, tools := 0, 0
+		for _, s := range st {
+			if s.State == "ready" {
+				ready++
+				tools += s.Tools
+			}
+		}
+		fmt.Printf("mcp: %d server(s), %d ready, %d tool(s)\n", len(st), ready, tools)
+	}
 	fmt.Println("type /help for commands")
 }
 
@@ -173,6 +183,18 @@ func (c *CLI) authCmd(parts []string) {
 	fmt.Println("auth mode ->", m)
 }
 
+// eventLabel prefers the human-readable MCP label, falling back to the raw
+// action name.
+func eventLabel(ev engine.Event) string {
+	if v, ok := ev["display"].(string); ok && v != "" {
+		return v
+	}
+	if v, ok := ev["action"].(string); ok {
+		return v
+	}
+	return ""
+}
+
 func (c *CLI) printResult(out string, err error) {
 	if err != nil {
 		fmt.Println("error:", err)
@@ -207,33 +229,33 @@ func (c *CLI) chat(message string) {
 		case ev = <-ch:
 		}
 		switch ev["type"] {
-		case "chunk":
+		case engine.EventChunk:
 			fmt.Print(ev["content"])
 			inStream = true
-		case "executing":
+		case engine.EventExecuting:
 			c.endStream(&inStream)
-			fmt.Printf("[executing...] %v %v\n", ev["action"], ev["params"])
-		case "execution_done":
+			fmt.Printf("[executing...] %s %v\n", eventLabel(ev), ev["params"])
+		case engine.EventExecutionDone:
 			c.endStream(&inStream)
 			fmt.Printf("[result]\n%v\n", ev["result"])
-		case "execution_error":
+		case engine.EventExecutionError:
 			c.endStream(&inStream)
 			fmt.Printf("[result]\nError: %v\n", ev["error"])
-		case "auth_required":
+		case engine.EventAuthRequired:
 			c.endStream(&inStream)
 			c.promptAuth(s.ID, ev)
-		case "execution_denied":
+		case engine.EventExecutionDenied:
 			fmt.Println("[denied]")
-		case "llm_error":
+		case engine.EventLLMError:
 			c.endStream(&inStream)
 			fmt.Println("\n[LLM Error]", ev["error"])
-		case "error":
+		case engine.EventError:
 			c.endStream(&inStream)
 			fmt.Println("\n[error]", ev["error"])
-		case "stopped":
+		case engine.EventStopped:
 			c.endStream(&inStream)
 			fmt.Println("\n[stopped]")
-		case "done":
+		case engine.EventDone:
 			c.endStream(&inStream)
 			return
 		}
@@ -249,7 +271,7 @@ func (c *CLI) endStream(inStream *bool) {
 
 func (c *CLI) promptAuth(sessionID string, ev engine.Event) {
 	action, _ := ev["action"].(string)
-	fmt.Printf("\n[auth] action=%v params=%v\n", ev["action"], ev["params"])
+	fmt.Printf("\n[auth] action=%s params=%v\n", eventLabel(ev), ev["params"])
 	for {
 		fmt.Print("allow? /y /n /auth 0|1|2: ")
 		line, err := c.reader.ReadString('\n')

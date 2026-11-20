@@ -19,7 +19,8 @@ type JobResult struct {
 type Job struct {
 	Action    string
 	Params    map[string]any
-	SessionID string // origin session; empty for operator direct commands
+	SessionID string        // origin session; empty for operator direct commands
+	Timeout   time.Duration // 0 = queue default (policy.cmd_timeout)
 	Result    chan JobResult
 
 	ctx       context.Context
@@ -57,7 +58,7 @@ var (
 	ErrCancelled = errors.New("job cancelled")
 )
 
-// TimeoutError marks an execution that exceeded cmd_timeout.
+// TimeoutError marks an execution that exceeded its job timeout.
 type TimeoutError struct{ After time.Duration }
 
 func (e *TimeoutError) Error() string {
@@ -76,6 +77,11 @@ type Queue struct {
 	stop      chan struct{}
 	once      sync.Once
 	timeout   time.Duration
+
+	mu      sync.Mutex
+	current *Job
+	closed  bool
+	senders sync.WaitGroup
 }
 
 // NewQueue creates the queue and starts its dispatcher goroutine.
@@ -101,18 +107,33 @@ func (q *Queue) Submit(ctx context.Context, action string, params map[string]any
 }
 
 // Run enqueues j and blocks for its result. Queue waiting is not subject to any
-// timeout; only execution is bounded by cmd_timeout. If the caller context is
-// cancelled (session stop), the job is cancelled and ErrCancelled is returned.
+// timeout; only execution is bounded by the job timeout (or the queue default).
+// If the caller context is cancelled (session stop), the job is cancelled and
+// ErrCancelled is returned.
 // If the queue is closed after the job is enqueued, ErrClosed is returned so
 // the caller can never block forever on a job the dispatcher will not run.
 func (q *Queue) Run(j *Job) (string, error) {
+	// Register the send before checking closed so Close can wait for every
+	// in-flight send before the dispatcher drains the queue and exits.
+	q.mu.Lock()
+	if q.closed {
+		q.mu.Unlock()
+		return "", ErrClosed
+	}
+	q.senders.Add(1)
+	q.mu.Unlock()
+
 	select {
 	case q.jobs <- j:
+		q.senders.Done()
 	case <-q.stop:
+		q.senders.Done()
 		return "", ErrClosed
 	case <-j.ctx.Done():
+		q.senders.Done()
 		return "", ErrCancelled
 	}
+
 	select {
 	case r := <-j.Result:
 		return r.Output, r.Err
@@ -146,15 +167,29 @@ func (q *Queue) Clear(sessionID string) {
 	}
 }
 
-// Close stops the queue and fails every pending job.
+// Close stops the queue, cancels the job currently executing (if any), and
+// fails every pending job. Cancelling the current job matters for MCP calls
+// and local shell commands so shutdown does not wait for a long-running action.
 func (q *Queue) Close() {
-	q.once.Do(func() { close(q.stop) })
+	q.once.Do(func() {
+		q.mu.Lock()
+		q.closed = true
+		close(q.stop)
+		current := q.current
+		q.mu.Unlock()
+		if current != nil {
+			current.Cancel()
+		}
+	})
 }
 
 func (q *Queue) run() {
 	for {
 		select {
 		case <-q.stop:
+			// Wait for all in-flight Run callers to finish enqueueing (or
+			// observe stop) so no job can be left in q.jobs after we drain it.
+			q.senders.Wait()
 			q.failPending()
 			return
 		case sid := <-q.clearReqs:
@@ -165,9 +200,6 @@ func (q *Queue) run() {
 				q.execJob(j)
 			}
 		case j := <-q.jobs:
-			if j == nil {
-				continue
-			}
 			q.execJob(j)
 		}
 	}
@@ -181,9 +213,6 @@ drain:
 	for {
 		select {
 		case j := <-q.jobs:
-			if j == nil {
-				continue
-			}
 			if j.SessionID == sessionID {
 				j.Cancel()
 				j.Result <- JobResult{Err: ErrCancelled}
@@ -202,10 +231,29 @@ func (q *Queue) execJob(j *Job) {
 		j.Result <- JobResult{Err: ErrCancelled}
 		return
 	}
+	q.mu.Lock()
+	q.current = j
+	closed := q.closed
+	q.mu.Unlock()
+	if closed {
+		j.Cancel()
+	}
+	defer func() {
+		q.mu.Lock()
+		if q.current == j {
+			q.current = nil
+		}
+		q.mu.Unlock()
+	}()
+
 	ctx := j.ctx
-	if q.timeout > 0 {
+	timeout := q.timeout
+	if j.Timeout > 0 {
+		timeout = j.Timeout
+	}
+	if timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, q.timeout)
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 	out, err := q.exec.Execute(ctx, j.Action, j.Params)
@@ -218,7 +266,7 @@ func (q *Queue) execJob(j *Job) {
 		case j.Cancelled():
 			err = ErrCancelled
 		case ctx.Err() == context.DeadlineExceeded:
-			err = &TimeoutError{After: q.timeout}
+			err = &TimeoutError{After: timeout}
 		case ctx.Err() == context.Canceled:
 			err = ErrCancelled
 		}
@@ -230,9 +278,7 @@ func (q *Queue) failPending() {
 	for {
 		select {
 		case j := <-q.jobs:
-			if j != nil {
-				j.Result <- JobResult{Err: ErrClosed}
-			}
+			j.Result <- JobResult{Err: ErrClosed}
 		default:
 			return
 		}

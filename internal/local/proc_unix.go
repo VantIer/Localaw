@@ -7,20 +7,14 @@ import (
 	"errors"
 	"os/exec"
 	"syscall"
+
+	"localaw/internal/procutil"
 )
 
 func shellCommand(ctx context.Context, command string) *exec.Cmd {
 	c := exec.CommandContext(ctx, "/bin/sh", "-c", command)
-	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	procutil.Prepare(c)
 	return c
-}
-
-func killTree(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return nil
-	}
-	// Negative PID targets the whole process group.
-	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }
 
 func isCrossDeviceError(err error) bool {

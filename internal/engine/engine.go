@@ -14,10 +14,17 @@ import (
 
 	"github.com/openai/openai-go"
 
-	"localaw/internal/command"
 	"localaw/internal/config"
 	"localaw/internal/llm"
 	"localaw/internal/local"
+	"localaw/internal/mcphost"
+	"localaw/internal/toolreg"
+)
+
+const (
+	// sessionGracePeriod bounds how long Close/Reset wait for a running
+	// conversation (including non-cancellable file operations).
+	sessionGracePeriod = 5 * time.Second
 )
 
 // LLMChatter is the subset of llm.Client used by the engine.
@@ -29,7 +36,7 @@ type LLMChatter interface {
 type Engine struct {
 	cfg   *config.Config
 	llm   LLMChatter
-	tools []openai.ChatCompletionToolParam
+	reg   *toolreg.Registry
 	queue *local.Queue
 	hub   *eventHub
 
@@ -37,23 +44,34 @@ type Engine struct {
 	sessions map[string]*Session
 	active   string
 	seq      uint64
+	closed   bool
 
 	authMu   sync.Mutex
 	authMode int
 }
 
-// New creates an engine using the official OpenAI-compatible client.
-func New(cfg *config.Config, queue *local.Queue) *Engine {
+// NewWithMCP creates an engine with an attached MCP host.
+func NewWithMCP(cfg *config.Config, queue *local.Queue, host *mcphost.Manager) *Engine {
 	client := llm.New(cfg.LLM.APIBase, cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.Temperature, cfg.LLM.Stream)
-	return NewWithClient(cfg, queue, client)
+	return newWithRegistry(cfg, queue, client, toolreg.New(host))
 }
 
-// NewWithClient creates an engine with an injected chat client (for tests).
-func NewWithClient(cfg *config.Config, queue *local.Queue, client LLMChatter) *Engine {
+// newWithClient creates an engine with an injected chat client (test seam).
+func newWithClient(cfg *config.Config, queue *local.Queue, client LLMChatter) *Engine {
+	return newWithRegistry(cfg, queue, client, toolreg.New(nil))
+}
+
+// newWithClientAndMCP creates an engine with an injected chat client and MCP
+// host (test seam).
+func newWithClientAndMCP(cfg *config.Config, queue *local.Queue, client LLMChatter, host *mcphost.Manager) *Engine {
+	return newWithRegistry(cfg, queue, client, toolreg.New(host))
+}
+
+func newWithRegistry(cfg *config.Config, queue *local.Queue, client LLMChatter, reg *toolreg.Registry) *Engine {
 	return &Engine{
 		cfg:      cfg,
 		llm:      client,
-		tools:    llm.BuildTools(),
+		reg:      reg,
 		queue:    queue,
 		hub:      newEventHub(),
 		sessions: map[string]*Session{},
@@ -69,6 +87,9 @@ func (e *Engine) NewSession(title string) (*Session, error) {
 }
 
 func (e *Engine) newSessionLocked(title string) (*Session, error) {
+	if e.closed {
+		return nil, fmt.Errorf("engine closed")
+	}
 	if len(e.sessions) >= e.cfg.Policy.MaxSessions {
 		return nil, fmt.Errorf("session limit reached (%d)", e.cfg.Policy.MaxSessions)
 	}
@@ -85,10 +106,42 @@ func (e *Engine) newSessionLocked(title string) (*Session, error) {
 	return s, nil
 }
 
+// Close stops all sessions, waits for their goroutines with a bounded deadline,
+// and closes event subscribers.
+func (e *Engine) Close() {
+	e.mu.Lock()
+	if e.closed {
+		e.mu.Unlock()
+		return
+	}
+	e.closed = true
+	sessions := make([]*Session, 0, len(e.sessions))
+	for _, s := range e.sessions {
+		sessions = append(sessions, s)
+	}
+	e.mu.Unlock()
+
+	for _, s := range sessions {
+		e.stopSession(s)
+	}
+	deadline := time.Now().Add(sessionGracePeriod)
+	for _, s := range sessions {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+		e.waitRun(s, remaining)
+	}
+	e.hub.close()
+}
+
 // EnsureSession returns the active session, creating one if none exists.
 func (e *Engine) EnsureSession() (*Session, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.closed {
+		return nil, fmt.Errorf("engine closed")
+	}
 	if id := e.active; id != "" {
 		if s := e.sessions[id]; s != nil {
 			return s, nil
@@ -159,7 +212,7 @@ func (e *Engine) CloseSession(id string) bool {
 		return false
 	}
 	e.stopSession(s)
-	clean := e.waitRun(s, 5*time.Second)
+	clean := e.waitRun(s, sessionGracePeriod)
 	e.mu.Lock()
 	delete(e.sessions, id)
 	if e.active == id {
@@ -181,7 +234,14 @@ func (e *Engine) CloseSession(id string) bool {
 
 // BeginChat starts the conversation loop for a session with a user message.
 func (e *Engine) BeginChat(sessionID, message string) error {
-	s := e.GetSession(sessionID)
+	// Hold the engine read lock through session setup so Close cannot set
+	// closed after we checked it but before the session becomes running.
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.closed {
+		return fmt.Errorf("engine closed")
+	}
+	s := e.sessions[sessionID]
 	if s == nil {
 		return fmt.Errorf("no such session: %s", sessionID)
 	}
@@ -253,7 +313,7 @@ func (e *Engine) ResetConversation(sessionID string) bool {
 		return false
 	}
 	e.stopSession(s)
-	if !e.waitRun(s, 5*time.Second) {
+	if !e.waitRun(s, sessionGracePeriod) {
 		s.mu.Lock()
 		s.resetPending = true
 		s.mu.Unlock()
@@ -334,7 +394,7 @@ func (e *Engine) awaitAuth(s *Session, ch chan bool) bool {
 		if stopped || pc == nil {
 			return false
 		}
-		if !command.RequiresAuth(e.AuthMode(), pc.Action) {
+		if !e.reg.RequiresAuth(e.AuthMode(), pc.Action) {
 			return true
 		}
 		select {
@@ -368,7 +428,12 @@ func (e *Engine) SetAuthMode(mode int) {
 
 // RequiresAuth reports whether an action needs authorization right now.
 func (e *Engine) RequiresAuth(action string) bool {
-	return command.RequiresAuth(e.AuthMode(), action)
+	return e.reg.RequiresAuth(e.AuthMode(), action)
+}
+
+// MCPStatus returns the status of configured MCP servers (nil when MCP is off).
+func (e *Engine) MCPStatus() []mcphost.ServerStatus {
+	return e.reg.MCPStatus()
 }
 
 // RenderSystemPrompt fills {system_name} with the local OS.

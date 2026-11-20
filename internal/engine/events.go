@@ -10,6 +10,25 @@ import (
 // session's conversation goroutine indefinitely.
 const publishTimeout = 2 * time.Second
 
+// Event type constants shared by the engine, CLI and web SSE layer.
+const (
+	EventAnswering       = "answering"
+	EventChunk           = "chunk"
+	EventResponseDone    = "response_done"
+	EventAuthRequired    = "auth_required"
+	EventExecuting       = "executing"
+	EventExecutionDone   = "execution_done"
+	EventExecutionError  = "execution_error"
+	EventExecutionDenied = "execution_denied"
+	EventStopped         = "stopped"
+	EventLLMError        = "llm_error"
+	EventError           = "error"
+	EventDone            = "done"
+	EventReset           = "reset"
+	EventSnapshot        = "snapshot"
+	EventIdle            = "idle"
+)
+
 // Event is a JSON-serializable conversation event.
 type Event map[string]any
 
@@ -44,6 +63,21 @@ func (h *eventHub) unsubscribe(s *subscriber) {
 	// Signal publish to stop waiting on this subscriber; s.ch is not closed
 	// because runConversation may still be publishing concurrently.
 	s.closeOnce.Do(func() { close(s.done) })
+}
+
+// close detaches every subscriber and signals attached clients (e.g. SSE
+// streams) to stop. It is called during Engine.Close.
+func (h *eventHub) close() {
+	h.mu.Lock()
+	subs := make([]*subscriber, 0, len(h.subs))
+	for s := range h.subs {
+		subs = append(subs, s)
+	}
+	h.subs = make(map[*subscriber]struct{})
+	h.mu.Unlock()
+	for _, s := range subs {
+		s.closeOnce.Do(func() { close(s.done) })
+	}
 }
 
 func (h *eventHub) publish(sessionID string, ev Event) {
